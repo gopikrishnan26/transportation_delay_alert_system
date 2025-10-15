@@ -1,0 +1,96 @@
+trigger:
+  branches:
+    include:
+      - develop
+      - main
+
+pool:
+  name: SelfHostedPool
+
+stages:
+# -----------------
+# Build Backend
+# -----------------
+- stage: Build
+  displayName: "Build Backend"
+  jobs:
+    - job: Build
+      steps:
+      - task: NodeTool@0
+        inputs:
+          versionSpec: '18.x'
+      - script: |
+          cd backend
+          npm install
+          npm test
+        displayName: 'Install & Test Backend'
+      - task: PublishBuildArtifacts@1
+        inputs:
+          PathtoPublish: 'backend'
+          ArtifactName: 'backend-drop'
+
+# -----------------
+# Deploy to Dev
+# -----------------
+- stage: Deploy_Dev
+  displayName: "Deploy Backend to Dev"
+  dependsOn: Build
+  jobs:
+    - deployment: DeployDev
+      environment: 'dev'
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+            - download: current
+              artifact: backend-drop
+            - task: AzureFunctionApp@1
+              inputs:
+                azureSubscription: 'transport-azure-connection-dev'
+                appType: functionApp
+                appName: 'transport-delay-functions-dev'
+                package: '$(Pipeline.Workspace)/backend-drop'
+
+# -----------------
+# Deploy to Staging
+# -----------------
+- stage: Deploy_Staging
+  displayName: "Deploy Backend to Staging"
+  dependsOn: Deploy_Dev
+  jobs:
+    - deployment: DeployStaging
+      environment: 'staging'
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+            - download: current
+              artifact: backend-drop
+            - task: AzureFunctionApp@1
+              inputs:
+                azureSubscription: 'transport-azure-connection-dev'
+                appType: functionApp
+                appName: 'transport-delay-functions-staging'
+                package: '$(Pipeline.Workspace)/backend-drop'
+
+# -----------------
+# Deploy to Prod
+# -----------------
+- stage: Deploy_Prod
+  displayName: "Deploy Backend to Prod"
+  dependsOn: Deploy_Staging
+  jobs:
+    - deployment: DeployProd
+      environment: 'prod'
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+            - download: current
+              artifact: backend-drop
+            - task: AzureFunctionApp@1
+              inputs:
+                azureSubscription: 'transport-azure-connection-prod'
+                appType: functionApp
+                appName: 'transport-delay-functions'
+                package: '$(Pipeline.Workspace)/backend-drop'
