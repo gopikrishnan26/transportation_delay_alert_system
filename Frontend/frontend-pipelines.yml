@@ -1,0 +1,97 @@
+trigger:
+  branches:
+    include:
+      - develop
+      - main
+
+pool:
+  name: SelfHostedPool
+
+stages:
+# -----------------
+# Build Stage
+# -----------------
+- stage: Build
+  displayName: "Build Frontend"
+  jobs:
+    - job: Build
+      steps:
+      - task: NodeTool@0
+        inputs:
+          versionSpec: '18.x'
+      - script: |
+          node -v
+          npm -v
+          ls node_modules
+          npm install
+          npm run build
+        workingDirectory: '.'  # <-- point to repo root
+        displayName: 'Verify Node/npm and node_modules & Install & Build React App'
+
+      - task: PublishBuildArtifacts@1
+        inputs:
+          PathtoPublish: 'build'
+          ArtifactName: 'frontend-drop'
+
+# -----------------
+# Deploy to Dev
+# -----------------
+- stage: Deploy_Dev
+  displayName: "Deploy to Dev"
+  dependsOn: Build
+  jobs:
+    - deployment: DeployFrontendDev
+      environment: 'dev'
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+            - download: current
+              artifact: frontend-drop
+            - task: AzureWebApp@1
+              inputs:
+                azureSubscription: 'svc-dev'
+                appName: 'frontend-transport-app-dev'
+                package: '$(Pipeline.Workspace)/frontend-drop'
+
+# -----------------
+# Deploy to Staging
+# -----------------
+- stage: Deploy_Staging
+  displayName: "Deploy to Staging"
+  dependsOn: Deploy_Dev
+  jobs:
+    - deployment: DeployStaging
+      environment: 'staging'
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+            - download: current
+              artifact: frontend-drop
+            - task: AzureWebApp@1
+              inputs:
+                azureSubscription: 'svc-staging'
+                appName: 'frontend-transport-app-staging'
+                package: '$(Pipeline.Workspace)/frontend-drop'
+
+# -----------------
+# Deploy to Prod
+# -----------------
+- stage: Deploy_Prod
+  displayName: "Deploy to Production"
+  dependsOn: Deploy_Staging
+  jobs:
+    - deployment: DeployProd
+      environment: 'prod'
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+            - download: current
+              artifact: frontend-drop
+            - task: AzureWebApp@1
+              inputs:
+                azureSubscription: 'svc-prod'
+                appName: 'frontend-transport-app-prod'
+                package: '$(Pipeline.Workspace)/frontend-drop'
