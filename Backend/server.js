@@ -285,7 +285,7 @@ app.get("/bus-stops/:routeID", (req, res) => {
 
 // --------------------- Serve React ---------------------
 const __dirname = path.resolve(); // required in ES modules
-const buildPath = path.join(__dirname, "frontend", "build");
+const buildPath = path.join(__dirname, "Frontend", "build");
 
 app.use(express.static(buildPath));
 
