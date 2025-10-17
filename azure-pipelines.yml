@@ -24,7 +24,7 @@ steps:
 - task: Npm@1
   displayName: 'Building Modules for /Backend'
   inputs:
-    command: 'install'
+    command: 'ci'
     workingDir: 'Backend'
 
 - task: Npm@1
