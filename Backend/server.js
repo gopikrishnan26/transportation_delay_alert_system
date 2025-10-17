@@ -6,13 +6,6 @@ import db from "./database.js";
 dotenv.config();
 
 const app = express();
-const build_path = path.join(__dirname__, '..', 'frontend', 'build');
-app.use(express.static(build_path));
-
-app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "build", "index.html"));
-});
-
 app.use(cors());
 app.use(express.json());
 
@@ -289,8 +282,18 @@ app.get("/bus-stops/:routeID", (req, res) => {
   );
 });
 
+// --------------------- Serve React ---------------------
+const __dirname = path.resolve(); // required in ES modules
+const buildPath = path.join(__dirname, "frontend", "build");
+
+app.use(express.static(buildPath));
+
+app.get("*", (req, res) => {
+  res.sendFile(path.join(buildPath, "index.html"));
+});
+
 // --------------------- SERVER START ---------------------
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT;
 app.listen(PORT, () =>
   console.log(`🚀 Server running on http://localhost:${PORT}`)
 );
