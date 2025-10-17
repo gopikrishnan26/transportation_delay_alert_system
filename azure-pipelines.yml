@@ -42,8 +42,8 @@ stages:
         customCommand: 'run build'
 
     - script: |
-        if not exist Backend\Frontend mkdir Backend\Frontend
-        xcopy /E /I /Y Frontend\build Backend\Frontend\
+        if not exist Backend\Frontend mkdir Backend\Frontend\build
+        xcopy /E /I /Y Frontend\build Backend\Frontend\build
       displayName: 'Move React build into Backend'
 
     - task: CopyFiles@2
