@@ -8,6 +8,11 @@ dotenv.config();
 const app = express();
 const build_path = path.join(__dirname__, '..', 'frontend', 'build');
 app.use(express.static(build_path));
+
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "build", "index.html"));
+});
+
 app.use(cors());
 app.use(express.json());
 

@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "start": "node server.js",
+    "build": "react-scripts build",
     "test": "echo \"No tests yet\""
   },
   "dependencies": {
