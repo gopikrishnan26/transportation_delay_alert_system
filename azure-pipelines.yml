@@ -9,41 +9,66 @@ trigger:
 pool:
   name: SelfHostPool
 
-steps:
-- task: NodeTool@0
-  inputs:
-    versionSpec: '20.x'
-  displayName: 'Install Node.js'
+stages:
+# -------- BUILD --------
+- stage: Build
+  displayName: 'Build Stage'
+  jobs:
+  - job: Build
+    displayName: 'Build Job'
+    steps:
+    - task: NodeTool@0
+      inputs:
+        versionSpec: '20.x'
+      displayName: 'Install Node.js'
 
-- task: Npm@1
-  displayName: 'Installing Modules for /Frontend'
-  inputs:
-    command: 'install'
-    workingDir: 'Frontend'
+    - task: Npm@1
+      displayName: 'Installing Modules for /Frontend'
+      inputs:
+        command: 'install'
+        workingDir: 'Frontend'
 
-- task: Npm@1
-  displayName: 'Building Modules for /Backend'
-  inputs:
-    command: 'ci'
-    workingDir: 'Backend'
+    - task: Npm@1
+      displayName: 'Installing Modules for /Backend'
+      inputs:
+        command: 'ci'
+        workingDir: 'Backend'
 
-- task: Npm@1
-  displayName: 'Building Modules for /Frontend'
-  inputs:
-    command: 'custom'
-    workingDir: 'Frontend'
-    customCommand: 'run build'
+    - task: Npm@1
+      displayName: 'Building Modules for /Frontend'
+      inputs:
+        command: 'custom'
+        workingDir: 'Frontend'
+        customCommand: 'run build'
 
-- task: CopyFiles@2
-  inputs:
-    Contents: |
-      Frontend/build/**
-      Backend/**
-    TargetFolder: $(Build.ArtifactStagingDirectory)
+    - task: CopyFiles@2
+      inputs:
+        Contents: |
+          Frontend/build/**
+          Backend/**
+        TargetFolder: $(Build.ArtifactStagingDirectory)
 
-- task: PublishBuildArtifacts@1
-  inputs:
-    PathtoPublish: '$(Build.ArtifactStagingDirectory)'
-    ArtifactName: 'release'
-    publishLocation: 'Container'
+    - task: PublishBuildArtifacts@1
+      inputs:
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+        ArtifactName: 'release'
+        publishLocation: 'Container'
 
+# -------- DEPLOY --------
+- stage: Deploy
+  dependsOn: Build
+  jobs:
+  - deployment: DeployToAppService
+    environment: 'Production'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - download: current
+            artifact: release
+
+          - task: AzureWebApp@1
+            inputs:
+              azureSubscription: 'tdas_sc'
+              appName: 'transportationDelayAlertApp'
+              package: '$(Pipeline.Workspace)/release'
