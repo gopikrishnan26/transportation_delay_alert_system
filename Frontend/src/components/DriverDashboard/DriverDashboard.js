@@ -20,7 +20,7 @@ function DriverDashboard() {
     // Fetch route + bus stops assigned to this driver
     const fetchRoute = async () => {
       try {
-        const res = await fetch(`http://localhost:5000/driver-route/${driverID}`);
+        const res = await fetch(`https:transportationdelayalertapp-dhhpdnakdsg6cgdh.centralindia-01.azurewebsites.net/driver-route/${driverID}`);
         if (!res.ok) throw new Error("No route assigned");
         const data = await res.json();
         setRouteName(data.routeName);

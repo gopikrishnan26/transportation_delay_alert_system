@@ -43,12 +43,12 @@ function AdminDashboard() {
   });
 
   useEffect(() => {
-    fetch("http://localhost:5000/drivers")
+    fetch("https:transportationdelayalertapp-dhhpdnakdsg6cgdh.centralindia-01.azurewebsites.net/drivers")
       .then((res) => res.json())
       .then((data) => setDrivers(data))
       .catch((err) => console.error(err));
 
-    fetch("http://localhost:5000/routes")
+    fetch("https:transportationdelayalertapp-dhhpdnakdsg6cgdh.centralindia-01.azurewebsites.net/routes")
       .then((res) => res.json())
       .then((data) => setRoutes(data))
       .catch((err) => console.error(err));
@@ -56,7 +56,7 @@ function AdminDashboard() {
 
   useEffect(() => {
     if (modifyBusStopData.routeID) {
-      fetch(`http://localhost:5000/bus-stops/${modifyBusStopData.routeID}`)
+      fetch(`https:transportationdelayalertapp-dhhpdnakdsg6cgdh.centralindia-01.azurewebsites.net/bus-stops/${modifyBusStopData.routeID}`)
         .then((res) => res.json())
         .then((data) => setBusStops(data))
         .catch((err) => console.error(err));
@@ -65,7 +65,7 @@ function AdminDashboard() {
 
   const handleAssignDriver = async (e) => {
     e.preventDefault();
-    const res = await fetch("http://localhost:5000/assign-driver", {
+    const res = await fetch("https:transportationdelayalertapp-dhhpdnakdsg6cgdh.centralindia-01.azurewebsites.net/assign-driver", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(assignDriverData),
@@ -76,7 +76,7 @@ function AdminDashboard() {
 
   const handleAddBusStop = async (e) => {
     e.preventDefault();
-    const res = await fetch("http://localhost:5000/add-bus-stop", {
+    const res = await fetch("https:transportationdelayalertapp-dhhpdnakdsg6cgdh.centralindia-01.azurewebsites.net/add-bus-stop", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(addBusStopData),
@@ -87,7 +87,7 @@ function AdminDashboard() {
 
   const handleChangeDriver = async (e) => {
     e.preventDefault();
-    const res = await fetch("http://localhost:5000/change-driver", {
+    const res = await fetch("https:transportationdelayalertapp-dhhpdnakdsg6cgdh.centralindia-01.azurewebsites.net/change-driver", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(changeDriverData),
@@ -97,7 +97,7 @@ function AdminDashboard() {
   };
 
   const handleRemoveBusStop = async (stopID) => {
-    const res = await fetch(`http://localhost:5000/remove-bus-stop/${stopID}`, {
+    const res = await fetch(`https:transportationdelayalertapp-dhhpdnakdsg6cgdh.centralindia-01.azurewebsites.net/remove-bus-stop/${stopID}`, {
       method: "DELETE",
     });
     const data = await res.json();
@@ -107,7 +107,7 @@ function AdminDashboard() {
 
   const handleAddDriver = async (e) => {
     e.preventDefault();
-    const res = await fetch("http://localhost:5000/addDriver", {
+    const res = await fetch("https:transportationdelayalertapp-dhhpdnakdsg6cgdh.centralindia-01.azurewebsites.net/addDriver", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(addDriverData),
@@ -293,14 +293,14 @@ function AdminDashboard() {
           <form
             onSubmit={async (e) => {
               e.preventDefault();
-              const res = await fetch("http://localhost:5000/add-route", {
+              const res = await fetch("https:transportationdelayalertapp-dhhpdnakdsg6cgdh.centralindia-01.azurewebsites.net/add-route", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(newRoute),
               });
               const data = await res.json();
               alert(data.message);
-              fetch("http://localhost:5000/routes")
+              fetch("https:transportationdelayalertapp-dhhpdnakdsg6cgdh.centralindia-01.azurewebsites.net/routes")
                 .then((res) => res.json())
                 .then((data) => setRoutes(data));
               setNewRoute({ routeName: "", numStops: "" });
