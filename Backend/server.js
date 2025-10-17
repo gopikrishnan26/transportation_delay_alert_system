@@ -6,8 +6,11 @@ import db from "./database.js";
 dotenv.config();
 
 const app = express();
+const build_path = path.join(__dirname__, '..', 'frontend', 'build');
+app.use(express.static(build_path));
 app.use(cors());
 app.use(express.json());
+
 
 // --------------------- AUTH APIs ---------------------
 
