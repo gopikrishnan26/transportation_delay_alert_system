@@ -285,16 +285,15 @@ app.get("/bus-stops/:routeID", (req, res) => {
 
 // --------------------- Serve React ---------------------
 const __dirname = path.resolve(); // required in ES modules
-const buildPath = path.join(__dirname, "Frontend", "build");
+const buildPath = path.join(__dirname, "public");
 
 app.use(express.static(buildPath));
-
 app.get("*", (req, res) => {
   res.sendFile(path.join(buildPath, "index.html"));
 });
 
 // --------------------- SERVER START ---------------------
-const PORT = process.env.PORT;
+const PORT = process.env.PORT || 5000;
 app.listen(PORT, () =>
   console.log(`🚀 Server running on http://localhost:${PORT}`)
 );
