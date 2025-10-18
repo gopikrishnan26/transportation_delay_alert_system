@@ -49,7 +49,7 @@ stages:
   jobs:
   - deployment: DeployJob
     displayName: 'Deploy Backend'
-    environment: 'AzureWebApp'
+    environment: 'Production'
     strategy:
       runOnce:
         deploy:
@@ -57,7 +57,7 @@ stages:
           # 1️⃣ Download artifact (backend.zip)
           - task: DownloadPipelineArtifact@2
             inputs:
-              artifactName: 'drop'
+              artifactName: 'release'
               targetPath: '$(Pipeline.Workspace)'
 
           # 2️⃣ Deploy to Azure Web App
