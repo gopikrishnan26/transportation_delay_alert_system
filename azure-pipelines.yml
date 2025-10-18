@@ -5,8 +5,8 @@ pool:
   name: 'SelfHostPool'
 
 variables:
-  azureServiceConnection: 'AzureFreeTrialConnection'
-  webAppName: 'your-webapp-name'
+  azureServiceConnection: 'tdas_sc'
+  webAppName: 'transportationDelayAlertApp'
   nodeVersion: '22.x'
 
 steps:
