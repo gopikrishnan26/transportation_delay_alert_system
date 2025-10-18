@@ -42,20 +42,14 @@ stages:
         xcopy Frontend\build Backend\public /E /I /Y
       displayName: 'Copy Frontend Build to Backend'
 
-    # 5️⃣ Add .deployment file for Azure
-    - script: |
-        echo [config] > Backend\.deployment
-        echo command = npm install && npm start >> Backend\.deployment
-      displayName: 'Add .deployment File'
-
-    # 6️⃣ Package backend (without node_modules)
+    # 5️⃣ Package backend (without node_modules)
     - script: |
         cd Backend
         if exist node_modules rmdir /s /q node_modules
         powershell -Command "Compress-Archive -Path '*' -DestinationPath '../backend.zip' -Force"
       displayName: 'Package Backend for Deployment'
 
-    # 7️⃣ Publish backend.zip as pipeline artifact
+    # 6️⃣ Publish backend.zip as pipeline artifact
     - task: PublishPipelineArtifact@1
       inputs:
         targetPath: '$(Build.SourcesDirectory)/backend.zip'
