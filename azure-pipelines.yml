@@ -1,79 +1,55 @@
-# Node.js with React
-# Build a Node.js project that uses React.
-# Add steps that analyze code, save build artifacts, deploy, and more:
-# https://docs.microsoft.com/azure/devops/pipelines/languages/javascript
-
 trigger:
 - main
 
 pool:
-  name: SelfHostPool
+  name: 'SelfHostPool'
 
-stages:
-# -------- BUILD --------
-- stage: Build
-  displayName: 'Build Stage'
-  jobs:
-  - job: Build
-    displayName: 'Build Job'
-    steps:
-    - task: NodeTool@0
-      inputs:
-        versionSpec: '20.x'
-      displayName: 'Install Node.js'
+variables:
+  azureServiceConnection: 'AzureFreeTrialConnection'
+  webAppName: 'your-webapp-name'
+  nodeVersion: '22.x'
 
-    - task: Npm@1
-      displayName: 'Installing Modules for /Frontend'
-      inputs:
-        command: 'install'
-        workingDir: 'Frontend'
+steps:
+# 1️⃣ Build frontend
+- task: NodeTool@0
+  inputs:
+    versionSpec: '$(nodeVersion)'
+  displayName: 'Use Node.js $(nodeVersion)'
 
-    - task: Npm@1
-      displayName: 'Installing Modules for /Backend'
-      inputs:
-        command: 'ci'
-        workingDir: 'Backend'
+- script: |
+    cd frontend
+    npm install
+    npm run build
+  displayName: 'Build Frontend'
+  shell: cmd
 
-    - task: Npm@1
-      displayName: 'Building Modules for /Frontend'
-      inputs:
-        command: 'custom'
-        workingDir: 'Frontend'
-        customCommand: 'run build'
+# 2️⃣ Copy frontend build → backend/public
+- powershell: |
+    Write-Host "Copying frontend build to backend/public..."
+    $src  = "frontend\build\*"
+    $dest = "backend\public"
+    if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
+    New-Item -ItemType Directory -Path $dest | Out-Null
+    Copy-Item $src $dest -Recurse
+  displayName: 'Combine Frontend + Backend'
 
-    - script: |
-        if not exist Backend\Frontend mkdir Backend\Frontend\build
-        xcopy /E /I /Y Frontend\build Backend\Frontend\build
-      displayName: 'Move React build into Backend'
+# 3️⃣ Install backend dependencies
+- script: |
+    cd backend
+    npm install --production
+  displayName: 'Install Backend Dependencies'
+  shell: cmd
 
-    - task: CopyFiles@2
-      displayName: 'Copy Backend with React build'
-      inputs:
-        SourceFolder: 'Backend'
-        Contents: '**'
-        TargetFolder: $(Build.ArtifactStagingDirectory)
+# 4️⃣ Package backend for deployment
+- powershell: |
+    Write-Host "Packaging backend..."
+    Compress-Archive -Path "backend\*" -DestinationPath "backend.zip" -Force
+  displayName: 'Create Deployment Package'
 
-    - task: PublishBuildArtifacts@1
-      inputs:
-        PathtoPublish: '$(Build.ArtifactStagingDirectory)'
-        ArtifactName: 'release'
-        publishLocation: 'Container'
-
-# -------- DEPLOY --------
-- stage: Deploy
-  dependsOn: Build
-  jobs:
-  - deployment: DeployToAppService
-    environment: 'Production'
-    strategy:
-      runOnce:
-        deploy:
-          steps:
-          - download: current
-            artifact: release
-
-          - task: AzureWebApp@1
-            inputs:
-              azureSubscription: 'tdas_sc'
-              appName: 'transportationDelayAlertApp'
-              package: '$(Pipeline.Workspace)/release'
+# 5️⃣ Deploy to Azure Web App
+- task: AzureWebApp@1
+  inputs:
+    azureSubscription: '$(azureServiceConnection)'
+    appName: '$(webAppName)'
+    package: 'backend.zip'
+  displayName: 'Deploy to Azure Web App'
