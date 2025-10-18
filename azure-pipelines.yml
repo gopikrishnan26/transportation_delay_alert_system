@@ -43,6 +43,13 @@ stages:
         if exist node_modules rmdir /s /q node_modules
         powershell -Command "Compress-Archive -Path '*' -DestinationPath '../backend.zip' -Force"
       displayName: 'Package Backend for Deployment'
+    
+    # 6️⃣ Publish artifact
+    - task: PublishPipelineArtifact@1
+      inputs:
+        targetPath: '$(Build.SourcesDirectory)/backend.zip'
+        artifact: 'release'
+      displayName: 'Publish Backend Artifact'
 
 - stage: Deploy
   displayName: 'Deploy to Azure Web App'
