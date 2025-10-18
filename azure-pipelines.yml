@@ -1,45 +1,69 @@
+trigger:
+- main
+
+pool:
+  name: SelfHostPool
+
+variables:
+  NODE_VERSION: '20.x'
+
 stages:
+# ========================================
+# 1️⃣ Build Frontend & Backend
+# ========================================
 - stage: Build
   displayName: 'Build Frontend & Backend'
   jobs:
   - job: BuildJob
+    displayName: 'Build Job'
     pool:
       name: SelfHostPool
     steps:
+
+    # 1️⃣ Checkout code
     - checkout: self
 
+    # 2️⃣ Use Node.js
     - task: NodeTool@0
       inputs:
-        versionSpec: '20.x'
-      displayName: 'Use Node.js 20.x'
+        versionSpec: '$(NODE_VERSION)'
+      displayName: 'Use Node.js $(NODE_VERSION)'
 
+    # 3️⃣ Build Frontend
     - script: |
         cd Frontend
         npm install
         npm run build
       displayName: 'Build Frontend'
 
+    # 4️⃣ Copy frontend build to backend/public
     - script: |
         if not exist Backend\public mkdir Backend\public
         xcopy Frontend\build Backend\public /E /I /Y
       displayName: 'Copy Frontend Build to Backend'
 
+    # 5️⃣ Package backend (without node_modules)
     - script: |
         cd Backend
         if exist node_modules rmdir /s /q node_modules
         powershell -Command "Compress-Archive -Path '*' -DestinationPath '../backend.zip' -Force"
       displayName: 'Package Backend for Deployment'
 
+    # 6️⃣ Publish backend.zip as pipeline artifact
     - task: PublishPipelineArtifact@1
       inputs:
         targetPath: '$(Build.SourcesDirectory)/backend.zip'
         artifact: 'release'
       displayName: 'Publish Backend Artifact'
 
+# ========================================
+# 2️⃣ Deploy to Azure Web App
+# ========================================
 - stage: Deploy
   displayName: 'Deploy to Azure Web App'
   jobs:
   - deployment: DeployJob
+    displayName: 'Deploy Backend'
     environment: 'Production'
     pool:
       name: SelfHostPool
@@ -47,19 +71,18 @@ stages:
       runOnce:
         deploy:
           steps:
+
+          # 1️⃣ Download backend artifact
           - task: DownloadPipelineArtifact@2
             inputs:
               artifactName: 'release'
               targetPath: '$(Pipeline.Workspace)'
 
+          # 2️⃣ Deploy to Azure Web App
           - task: AzureWebApp@1
             inputs:
-              azureSubscription: 'tdas_sc'
+              azureSubscription: 'tdas_sc'         # Azure service connection name
               appType: 'webApp'
               appName: 'transportationDelayAlertApp'
               package: '$(Pipeline.Workspace)/backend.zip'
-
-          - script: |
-              cd site\wwwroot
-              npm install --production
-            displayName: 'Install Backend Dependencies on Azure'
+              deploymentMethod: 'auto'            # Azure auto-detects Node app
