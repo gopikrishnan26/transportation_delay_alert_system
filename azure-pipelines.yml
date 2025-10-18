@@ -2,51 +2,74 @@ trigger:
 - main
 
 pool:
-  name: 'SelfHostPool'
+  name: SelfHostPool
 
 variables:
-  azureServiceConnection: 'tdas_sc'
-  webAppName: 'transportationDelayAlertApp'
-  nodeVersion: '22.x'
+  NODE_VERSION: '20.x'
 
-steps:
-# 1️⃣ Build frontend
-- task: NodeTool@0
-  inputs:
-    versionSpec: '$(nodeVersion)'
-  displayName: 'Use Node.js $(nodeVersion)'
+stages:
+- stage: Build
+  displayName: 'Build Frontend & Backend'
+  jobs:
+  - job: BuildJob
+    displayName: 'Build Job'
+    steps:
 
-- script: |
-    cd frontend
-    npm install
-    npm run build
-  displayName: 'Build Frontend'
+    # 1️⃣ Checkout code
+    - task: Checkout@1
 
-# 2️⃣ Copy frontend build → backend/public
-- script: |
-    REM Create backend/public if it doesn't exist
-    if not exist backend\public mkdir backend\public
+    # 2️⃣ Install Node on self-hosted agent (optional if already installed)
+    - task: NodeTool@0
+      inputs:
+        versionSpec: '$(NODE_VERSION)'
+      displayName: 'Use Node.js $(NODE_VERSION)'
 
-    REM Copy all files from frontend\build to backend\public
-    xcopy frontend\build backend\public /E /I /Y
-  displayName: 'Copy Frontend Build to Backend'
+    # 3️⃣ Build Frontend
+    - script: |
+        cd Frontend
+        npm install
+        npm run build
+      displayName: 'Build Frontend'
 
-# 3️⃣ Install backend dependencies
-- script: |
-    cd backend
-    npm install --production
-  displayName: 'Install Backend Dependencies'
+    # 4️⃣ Copy frontend build to backend/public
+    - script: |
+        if not exist Backend\public mkdir Backend\public
+        xcopy Frontend\build Backend\public /E /I /Y
+      displayName: 'Copy Frontend Build to Backend'
 
-# 4️⃣ Package backend for deployment
-- script: |
-    REM Package backend folder into backend.zip
-    powershell -Command "Compress-Archive -Path 'backend\*' -DestinationPath 'backend.zip' -Force"
-  displayName: 'Package Backend for Deployment'
+    # 5️⃣ Package backend (without node_modules)
+    - script: |
+        cd Backend
+        if exist node_modules rmdir /s /q node_modules
+        powershell -Command "Compress-Archive -Path '*' -DestinationPath '../backend.zip' -Force"
+      displayName: 'Package Backend for Deployment'
 
-# 5️⃣ Deploy to Azure Web App
-- task: AzureWebApp@1
-  inputs:
-    azureSubscription: '$(azureServiceConnection)'
-    appName: '$(webAppName)'
-    package: 'backend.zip'
+- stage: Deploy
   displayName: 'Deploy to Azure Web App'
+  jobs:
+  - deployment: DeployJob
+    displayName: 'Deploy Backend'
+    environment: 'AzureWebApp'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          # 1️⃣ Download artifact (backend.zip)
+          - task: DownloadPipelineArtifact@2
+            inputs:
+              artifactName: 'drop'
+              targetPath: '$(Pipeline.Workspace)'
+
+          # 2️⃣ Deploy to Azure Web App
+          - task: AzureWebApp@1
+            inputs:
+              azureSubscription: 'tdas_sc'
+              appType: 'webApp'
+              appName: 'transportationDelayAlertApp'
+              package: '$(Pipeline.Workspace)/backend.zip'
+
+          # 3️⃣ Post-deploy: Install backend dependencies on Azure
+          - script: |
+              cd site\wwwroot
+              npm install --production
+            displayName: 'Install Backend Dependencies on Azure'
