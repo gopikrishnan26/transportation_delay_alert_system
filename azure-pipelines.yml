@@ -21,30 +21,27 @@ steps:
     npm install
     npm run build
   displayName: 'Build Frontend'
-  pwsh: true
 
 # 2️⃣ Copy frontend build → backend/public
-- powershell: |
-    Write-Host "Copying frontend build to backend/public..."
-    $src  = "frontend\build\*"
-    $dest = "backend\public"
-    if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
-    New-Item -ItemType Directory -Path $dest | Out-Null
-    Copy-Item $src $dest -Recurse
-  displayName: 'Combine Frontend + Backend'
+- script: |
+    REM Create backend/public if it doesn't exist
+    if not exist backend\public mkdir backend\public
+
+    REM Copy all files from frontend\build to backend\public
+    xcopy frontend\build backend\public /E /I /Y
+  displayName: 'Copy Frontend Build to Backend'
 
 # 3️⃣ Install backend dependencies
 - script: |
     cd backend
     npm install --production
   displayName: 'Install Backend Dependencies'
-  shell: cmd
 
 # 4️⃣ Package backend for deployment
-- powershell: |
-    Write-Host "Packaging backend..."
-    Compress-Archive -Path "backend\*" -DestinationPath "backend.zip" -Force
-  displayName: 'Create Deployment Package'
+- script: |
+    REM Package backend folder into backend.zip
+    powershell -Command "Compress-Archive -Path 'backend\*' -DestinationPath 'backend.zip' -Force"
+  displayName: 'Package Backend for Deployment'
 
 # 5️⃣ Deploy to Azure Web App
 - task: AzureWebApp@1
