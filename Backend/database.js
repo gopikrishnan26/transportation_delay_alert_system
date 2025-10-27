@@ -1,49 +1,68 @@
-import sqlite3 from "sqlite3";
-const sqlite3Verbose = sqlite3.verbose();
+import sql from "mssql";
+import dotenv from "dotenv";
+dotenv.config();
 
-// Connect to SQLite database
-const db = new sqlite3Verbose.Database("./database.db", (err) => {
-  if (err) console.error("Error opening database:", err);
-  else console.log("✅ Connected to SQLite database");
-});
+const config = {
+  user: process.env.AZURE_SQL_USER, // e.g., yourAdmin
+  password: process.env.AZURE_SQL_PASSWORD, // your Azure SQL password
+  server: process.env.AZURE_SQL_SERVER, // e.g., yourservername.database.windows.net
+  database: process.env.AZURE_SQL_DATABASE, // e.g., transportation_db
+  options: {
+    encrypt: true,
+    trustServerCertificate: false,
+  },
+};
 
-db.serialize(() => {
-  //Users table
-  db.run(`
-    CREATE TABLE IF NOT EXISTS users (
-      userID INTEGER PRIMARY KEY AUTOINCREMENT,
-      username TEXT NOT NULL,
-      mobileNo INTEGER NOT NULL UNIQUE,
-      password TEXT NOT NULL,
-      role TEXT NOT NULL,
-      login_timestamp TEXT,
-      logout_timestamp TEXT
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
+// Connect to Azure SQL
+export const poolPromise = sql.connect(config)
+  .then((pool) => {
+    console.log("✅ Connected to Azure SQL Database");
+    return pool;
+  })
+  .catch((err) => {
+    console.error("❌ Database connection failed:", err);
+  });
+
+// Function to create tables (if they don't exist)
+export async function initializeTables() {
+  const pool = await poolPromise;
+
+  await pool.request().query(`
+    IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='users' AND xtype='U')
+    CREATE TABLE users (
+      userID INT IDENTITY(1,1) PRIMARY KEY,
+      username NVARCHAR(100) NOT NULL,
+      mobileNo BIGINT NOT NULL UNIQUE,
+      password NVARCHAR(100) NOT NULL,
+      role NVARCHAR(50) NOT NULL,
+      login_timestamp DATETIME2 NULL,
+      logout_timestamp DATETIME2 NULL,
+      created_at DATETIME2 DEFAULT GETDATE()
+    );
   `);
 
-  //Driver Routes table
-  db.run(`
-    CREATE TABLE IF NOT EXISTS driverRoutes (
-      routeID INTEGER PRIMARY KEY AUTOINCREMENT,
-      routeName TEXT NOT NULL,
-      numStops INTEGER DEFAULT 0,
-      driverID INTEGER UNIQUE,  -- one route per driver
+  await pool.request().query(`
+    IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='driverRoutes' AND xtype='U')
+    CREATE TABLE driverRoutes (
+      routeID INT IDENTITY(1,1) PRIMARY KEY,
+      routeName NVARCHAR(100) NOT NULL,
+      numStops INT DEFAULT 0,
+      driverID INT UNIQUE NULL,
       FOREIGN KEY (driverID) REFERENCES users(userID)
     );
   `);
 
-  //Bus Stops table
-  db.run(`
-    CREATE TABLE IF NOT EXISTS busStops (
-      stopID INTEGER PRIMARY KEY AUTOINCREMENT,
-      routeID INTEGER,
-      stopName TEXT NOT NULL,
-      arrivalTime TEXT,       -- "HH:MM" or ISO timestamp
-      departureTime TEXT,     -- "HH:MM" or ISO timestamp
+  await pool.request().query(`
+    IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='busStops' AND xtype='U')
+    CREATE TABLE busStops (
+      stopID INT IDENTITY(1,1) PRIMARY KEY,
+      routeID INT NOT NULL,
+      stopName NVARCHAR(100) NOT NULL,
+      arrivalTime NVARCHAR(50),
+      departureTime NVARCHAR(50),
       FOREIGN KEY (routeID) REFERENCES driverRoutes(routeID)
     );
   `);
-});
 
-export default db;
+  console.log("✅ Tables verified/created successfully in Azure SQL");
+}
