@@ -1,295 +1,307 @@
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
-import db from "./database.js";
-import path from "path";
+import { poolPromise, initializeTables } from "./database.js";
 
 dotenv.config();
-
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-
-// --------------------- AUTH APIs ---------------------
+// Initialize DB tables (optional)
+initializeTables();
 
 // ✅ LOGIN
-app.post("/login", (req, res) => {
+app.post("/login", async (req, res) => {
   const { mobileNo, password, role } = req.body;
-
-  if (!mobileNo || !password || !role) {
+  if (!mobileNo || !password || !role)
     return res.status(400).json({ message: "All fields are required" });
+
+  try {
+    const pool = await poolPromise;
+
+    // Check credentials
+    const result = await pool.request()
+      .input("mobileNo", mobileNo)
+      .input("password", password)
+      .input("role", role)
+      .query(`
+        SELECT * FROM users
+        WHERE mobileNo = @mobileNo AND password = @password AND role = @role
+      `);
+
+    const user = result.recordset[0];
+    if (!user)
+      return res.status(401).json({ message: "Invalid credentials" });
+
+    const loginTime = new Date();
+    await pool.request()
+      .input("loginTime", loginTime)
+      .input("userID", user.userID)
+      .query(`
+        UPDATE users
+        SET login_timestamp = @loginTime
+        WHERE userID = @userID
+      `);
+
+    res.json({
+      userID: user.userID,
+      mobileNo: user.mobileNo,
+      role: user.role,
+      login_timestamp: loginTime,
+    });
+
+  } catch (err) {
+    console.error("DB Error:", err.message);
+    res.status(500).json({ message: "DB Error" });
   }
-
-  db.get(
-    "SELECT * FROM users WHERE mobileNo = ? AND password = ? AND role = ?",
-    [mobileNo, password, role],
-    (err, user) => {
-      if (err) {
-        console.error("DB Error:", err.message);
-        return res.status(500).json({ message: "DB Error" });
-      }
-
-      if (!user) {
-        return res.status(401).json({ message: "Invalid credentials" });
-      }
-
-      const loginTime = new Date().toISOString();
-
-      db.run(
-        "UPDATE users SET login_timestamp = ? WHERE userID = ?",
-        [loginTime, user.userID],
-        (updateErr) => {
-          if (updateErr) {
-            console.error("DB Error:", updateErr.message);
-            return res.status(500).json({ message: "DB Error" });
-          }
-
-          res.json({
-            userID: user.userID,
-            mobileNo: user.mobileNo,
-            role: user.role,
-            login_timestamp: loginTime,
-          });
-        }
-      );
-    }
-  );
 });
 
 // ✅ LOGOUT
-app.post("/logout", (req, res) => {
+app.post("/logout", async (req, res) => {
   const { id } = req.body;
-  const logoutTime = new Date().toISOString();
+  const logoutTime = new Date();
 
-  db.run(
-    "UPDATE users SET logout_timestamp = ? WHERE userID = ?",
-    [logoutTime, id],
-    function (err) {
-      if (err) {
-        console.error("DB Error:", err.message);
-        return res.status(500).json({ message: "DB Error" });
-      }
+  try {
+    const pool = await poolPromise;
+    await pool.request()
+      .input("logoutTime", logoutTime)
+      .input("userID", id)
+      .query(`
+        UPDATE users
+        SET logout_timestamp = @logoutTime
+        WHERE userID = @userID
+      `);
 
-      res.json({
-        message: "Logout recorded",
-        logout_timestamp: logoutTime,
-      });
-    }
-  );
+    res.json({ message: "Logout recorded", logout_timestamp: logoutTime });
+  } catch (err) {
+    console.error("DB Error:", err.message);
+    res.status(500).json({ message: "DB Error" });
+  }
 });
 
-// --------------------- ADMIN APIs ---------------------
-
-// ✅ Assign Driver to Route
-app.post("/assign-driver", (req, res) => {
-  const { routeID, driverID } = req.body;
-
-  db.run(
-    "UPDATE driverRoutes SET driverID = ? WHERE routeID = ?",
-    [driverID, routeID],
-    function (err) {
-      if (err) {
-        console.error("DB Error:", err.message);
-        return res.status(500).json({ message: "DB Error" });
-      }
-      res.json({ message: "Driver assigned successfully" });
-    }
-  );
-});
-
-// ✅ Add Bus Stop
-app.post("/add-bus-stop", (req, res) => {
-  const { routeID, stopName, arrivalTime, departureTime } = req.body;
-
-  db.run(
-    "INSERT INTO busStops (routeID, stopName, arrivalTime, departureTime) VALUES (?, ?, ?, ?)",
-    [routeID, stopName, arrivalTime, departureTime || null],
-    function (err) {
-      if (err) {
-        console.error("DB Error:", err.message);
-        return res.status(500).json({ message: "DB Error" });
-      }
-      res.json({ message: "Bus stop added", stopID: this.lastID });
-    }
-  );
-});
-
-// ✅ Add New Driver
-app.post("/addDriver", (req, res) => {
-  const { driverName, mobileNo } = req.body;
+// ✅ ADD DRIVER
+app.post("/addDriver", async (req, res) => {
+  const { username, mobile } = req.body;
   const defaultPassword = "driver123";
 
-  if (!driverName || !mobileNo) {
-    console.log(driverName, mobileNo);
+  if (!username || !mobile) {
     return res.status(400).json({ message: "Username and mobile are required" });
   }
 
-  db.run(
-    "INSERT INTO users (username, mobileNo, role, password) VALUES (?, ?, 'driver', ?)",
-    [driverName, mobileNo, defaultPassword],
-    function (err) {
-      if (err) {
-        console.error("Error inserting driver:", err.message);
-        return res.status(500).json({ error: err.message });
-      }
-      res.json({
-        message: "Driver added successfully",
-        id: this.lastID,
-      });
-    }
-  );
+  try {
+    const pool = await poolPromise;
+    await pool.request()
+      .input("username", username)
+      .input("mobileNo", mobile)
+      .input("password", defaultPassword)
+      .query(`
+        INSERT INTO users (username, mobileNo, role, password)
+        VALUES (@username, @mobileNo, 'driver', @password)
+      `);
+
+    res.json({ message: "Driver added successfully" });
+  } catch (err) {
+    console.error("DB Error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// ✅ Add New Route
-app.post("/add-route", (req, res) => {
+// ✅ ADD ROUTE
+app.post("/add-route", async (req, res) => {
   const { routeName, numStops } = req.body;
 
   if (!routeName)
     return res.status(400).json({ message: "Route name is required" });
 
-  db.run(
-    "INSERT INTO driverRoutes (routeName, numStops) VALUES (?, ?)",
-    [routeName, numStops || 0],
-    function (err) {
-      if (err) {
-        console.error("DB Error:", err.message);
-        return res.status(500).json({ message: "DB Error" });
-      }
-      res.json({
-        message: "✅ Route added successfully",
-        routeID: this.lastID,
-      });
-    }
-  );
+  try {
+    const pool = await poolPromise;
+    await pool.request()
+      .input("routeName", routeName)
+      .input("numStops", numStops || 0)
+      .query(`
+        INSERT INTO driverRoutes (routeName, numStops)
+        VALUES (@routeName, @numStops)
+      `);
+
+    res.json({ message: "✅ Route added successfully" });
+  } catch (err) {
+    console.error("DB Error:", err.message);
+    res.status(500).json({ message: "DB Error" });
+  }
 });
 
-// ✅ Remove Bus Stop
-app.delete("/remove-bus-stop/:stopID", (req, res) => {
+// ✅ ASSIGN DRIVER TO ROUTE
+app.post("/assign-driver", async (req, res) => {
+  const { routeID, driverID } = req.body;
+
+  try {
+    const pool = await poolPromise;
+    await pool.request()
+      .input("routeID", routeID)
+      .input("driverID", driverID)
+      .query(`
+        UPDATE driverRoutes
+        SET driverID = @driverID
+        WHERE routeID = @routeID
+      `);
+
+    res.json({ message: "Driver assigned successfully" });
+  } catch (err) {
+    console.error("DB Error:", err.message);
+    res.status(500).json({ message: "DB Error" });
+  }
+});
+
+// ✅ ADD BUS STOP
+app.post("/add-bus-stop", async (req, res) => {
+  const { routeID, stopName, arrivalTime, departureTime } = req.body;
+
+  try {
+    const pool = await poolPromise;
+    await pool.request()
+      .input("routeID", routeID)
+      .input("stopName", stopName)
+      .input("arrivalTime", arrivalTime)
+      .input("departureTime", departureTime)
+      .query(`
+        INSERT INTO busStops (routeID, stopName, arrivalTime, departureTime)
+        VALUES (@routeID, @stopName, @arrivalTime, @departureTime)
+      `);
+
+    res.json({ message: "Bus stop added successfully" });
+  } catch (err) {
+    console.error("DB Error:", err.message);
+    res.status(500).json({ message: "DB Error" });
+  }
+});
+
+// ✅ REMOVE BUS STOP
+app.delete("/remove-bus-stop/:stopID", async (req, res) => {
   const { stopID } = req.params;
-  db.run(
-    "DELETE FROM busStops WHERE stopID = ?",
-    [stopID],
-    function (err) {
-      if (err) {
-        console.error("DB Error:", err.message);
-        return res.status(500).json({ message: "DB Error" });
-      }
-      res.json({ message: "Bus stop removed" });
-    }
-  );
+
+  try {
+    const pool = await poolPromise;
+    await pool.request()
+      .input("stopID", stopID)
+      .query(`
+        DELETE FROM busStops WHERE stopID = @stopID
+      `);
+
+    res.json({ message: "Bus stop removed" });
+  } catch (err) {
+    console.error("DB Error:", err.message);
+    res.status(500).json({ message: "DB Error" });
+  }
 });
 
-// ✅ Change Driver for Route
-app.post("/change-driver", (req, res) => {
+// ✅ CHANGE DRIVER FOR ROUTE
+app.post("/change-driver", async (req, res) => {
   const { routeID, newDriverID } = req.body;
 
-  db.run(
-    "UPDATE driverRoutes SET driverID = ? WHERE routeID = ?",
-    [newDriverID, routeID],
-    function (err) {
-      if (err) {
-        console.error("DB Error:", err.message);
-        return res.status(500).json({ message: "DB Error" });
-      }
-      res.json({ message: "Driver changed successfully" });
-    }
-  );
+  try {
+    const pool = await poolPromise;
+    await pool.request()
+      .input("routeID", routeID)
+      .input("newDriverID", newDriverID)
+      .query(`
+        UPDATE driverRoutes
+        SET driverID = @newDriverID
+        WHERE routeID = @routeID
+      `);
+
+    res.json({ message: "Driver changed successfully" });
+  } catch (err) {
+    console.error("DB Error:", err.message);
+    res.status(500).json({ message: "DB Error" });
+  }
 });
 
-// --------------------- DRIVER APIs ---------------------
-
-// ✅ Get Driver Route + Stops
-app.get("/driver-route/:driverID", (req, res) => {
+// ✅ DRIVER ROUTE + STOPS
+app.get("/driver-route/:driverID", async (req, res) => {
   const { driverID } = req.params;
 
-  db.get(
-    "SELECT * FROM driverRoutes WHERE driverID = ?",
-    [driverID],
-    (err, route) => {
-      if (err) {
-        console.error("DB Error:", err.message);
-        return res.status(500).json({ message: "DB Error" });
-      }
+  try {
+    const pool = await poolPromise;
 
-      if (!route)
-        return res.status(404).json({ message: "No route assigned" });
+    const routeResult = await pool.request()
+      .input("driverID", driverID)
+      .query(`
+        SELECT * FROM driverRoutes WHERE driverID = @driverID
+      `);
 
-      db.all(
-        "SELECT stopName, arrivalTime, departureTime FROM busStops WHERE routeID = ? ORDER BY arrivalTime ASC",
-        [route.routeID],
-        (err, stops) => {
-          if (err) {
-            console.error("DB Error:", err.message);
-            return res.status(500).json({ message: "DB Error" });
-          }
+    const route = routeResult.recordset[0];
+    if (!route)
+      return res.status(404).json({ message: "No route assigned" });
 
-          res.json({
-            routeName: route.routeName,
-            busStops: stops,
-          });
-        }
-      );
-    }
-  );
+    const stopsResult = await pool.request()
+      .input("routeID", route.routeID)
+      .query(`
+        SELECT stopName, arrivalTime, departureTime
+        FROM busStops
+        WHERE routeID = @routeID
+        ORDER BY arrivalTime ASC
+      `);
+
+    res.json({
+      routeName: route.routeName,
+      busStops: stopsResult.recordset,
+    });
+
+  } catch (err) {
+    console.error("DB Error:", err.message);
+    res.status(500).json({ message: "DB Error" });
+  }
 });
 
-// --------------------- DASHBOARD HELPER APIs ---------------------
-
-// ✅ Get All Drivers
-app.get("/drivers", (req, res) => {
-  db.all(
-    "SELECT userID, username FROM users WHERE role = 'driver'",
-    [],
-    (err, rows) => {
-      if (err) {
-        console.error("DB Error:", err.message);
-        return res.status(500).json({ message: "DB Error" });
-      }
-      res.json(rows);
-    }
-  );
+// ✅ GET ALL DRIVERS
+app.get("/drivers", async (req, res) => {
+  try {
+    const pool = await poolPromise;
+    const result = await pool.request().query(`
+      SELECT userID, username FROM users WHERE role = 'driver'
+    `);
+    res.json(result.recordset);
+  } catch (err) {
+    console.error("DB Error:", err.message);
+    res.status(500).json({ message: "DB Error" });
+  }
 });
 
-// ✅ Get All Routes
-app.get("/routes", (req, res) => {
-  db.all(
-    "SELECT routeID, routeName, driverID FROM driverRoutes",
-    [],
-    (err, rows) => {
-      if (err) {
-        console.error("DB Error:", err.message);
-        return res.status(500).json({ message: "DB Error" });
-      }
-      res.json(rows);
-    }
-  );
+// ✅ GET ALL ROUTES
+app.get("/routes", async (req, res) => {
+  try {
+    const pool = await poolPromise;
+    const result = await pool.request().query(`
+      SELECT routeID, routeName, driverID FROM driverRoutes
+    `);
+    res.json(result.recordset);
+  } catch (err) {
+    console.error("DB Error:", err.message);
+    res.status(500).json({ message: "DB Error" });
+  }
 });
 
-// ✅ Get Bus Stops for a Route
-app.get("/bus-stops/:routeID", (req, res) => {
+// ✅ GET BUS STOPS FOR ROUTE
+app.get("/bus-stops/:routeID", async (req, res) => {
   const { routeID } = req.params;
 
-  db.all(
-    "SELECT stopID, stopName, arrivalTime, departureTime FROM busStops WHERE routeID = ? ORDER BY arrivalTime ASC",
-    [routeID],
-    (err, rows) => {
-      if (err) {
-        console.error("DB Error:", err.message);
-        return res.status(500).json({ message: "DB Error" });
-      }
-      res.json(rows);
-    }
-  );
-});
+  try {
+    const pool = await poolPromise;
+    const result = await pool.request()
+      .input("routeID", routeID)
+      .query(`
+        SELECT stopID, stopName, arrivalTime, departureTime
+        FROM busStops
+        WHERE routeID = @routeID
+        ORDER BY arrivalTime ASC
+      `);
 
-// --------------------- Serve React ---------------------
-const __dirname = path.resolve(); // required in ES modules
-const buildPath = path.join(__dirname, "public");
-
-app.use(express.static(buildPath));
-app.get("*", (req, res) => {
-  res.sendFile(path.join(buildPath, "index.html"));
+    res.json(result.recordset);
+  } catch (err) {
+    console.error("DB Error:", err.message);
+    res.status(500).json({ message: "DB Error" });
+  }
 });
 
 // --------------------- SERVER START ---------------------
