@@ -5,7 +5,15 @@ import { poolPromise, initializeTables } from "./database.js";
 
 dotenv.config();
 const app = express();
-app.use(cors());
+import cors from "cors";
+
+// ✅ Always place this before any route definitions
+app.use(cors({
+  origin: ["http://localhost:3000", "https://your-frontend-domain-if-deployed.com"],
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true
+}));
 app.use(express.json());
 
 // Initialize DB tables (optional)
