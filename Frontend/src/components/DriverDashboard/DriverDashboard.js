@@ -6,21 +6,14 @@ function DriverDashboard() {
   const [routeName, setRouteName] = useState("");
   const [busStops, setBusStops] = useState([]);
   const [alertMessage, setAlertMessage] = useState("");
-
-  const driverID = localStorage.getItem("userId"); // get driverID from login
-  const driverRole = localStorage.getItem("userRole");
+  const driverID = localStorage.getItem("userId");
+  const role = localStorage.getItem("role");
 
   useEffect(() => {
-    // Redirect to login if not a driver
-    if (!driverID || driverRole !== "driver") {
-      navigate("/login");
-      return;
-    }
-
     // Fetch route + bus stops assigned to this driver
     const fetchRoute = async () => {
       try {
-        const res = await fetch(`https:transportationdelayalertapp-dhhpdnakdsg6cgdh.centralindia-01.azurewebsites.net/driver-route/${driverID}`);
+        const res = await fetch(`http://localhost:5000/driver-route/${driverID}`);
         if (!res.ok) throw new Error("No route assigned");
         const data = await res.json();
         setRouteName(data.routeName);
@@ -32,7 +25,7 @@ function DriverDashboard() {
     };
 
     fetchRoute();
-  }, [driverID, driverRole, navigate]);
+  }, [driverID, role, navigate]);
 
   const calculateDelay = (stopName) => {
     const delayMinutes = Math.floor(Math.random() * 10) + 1; // simulate delay
@@ -47,10 +40,34 @@ function DriverDashboard() {
     setAlertMessage(message);
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("userId");
-    localStorage.removeItem("userRole");
-    navigate("/");
+  const handleLogout = async () => {
+    try {
+      const userId = JSON.parse(localStorage.getItem("userId")); // assuming you stored user info as JSON
+      if (!userId) {
+        console.error("No user found in localStorage");
+        navigate("/");
+        return;
+      }
+
+      // Send logout request to backend
+      const res = await fetch("http://localhost:5000/logout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: userId }),
+      });
+
+      const data = await res.json();
+      console.log("Logout recorded:", data);
+
+      // Clear local storage
+      localStorage.removeItem("userId");
+      localStorage.removeItem("role");
+
+      navigate("/");
+    } catch (err) {
+      console.error("Logout failed:", err);
+      alert("Logout failed. Please try again.");
+    }
   };
 
   return (

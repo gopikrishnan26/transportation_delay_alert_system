@@ -5,7 +5,6 @@ import { poolPromise, initializeTables } from "./database.js";
 
 dotenv.config();
 const app = express();
-import cors from "cors";
 
 // ✅ Always place this before any route definitions
 app.use(cors({
@@ -90,10 +89,10 @@ app.post("/logout", async (req, res) => {
 
 // ✅ ADD DRIVER
 app.post("/addDriver", async (req, res) => {
-  const { username, mobile } = req.body;
+  const { username, mobileNo } = req.body;
   const defaultPassword = "driver123";
 
-  if (!username || !mobile) {
+  if (!username || !mobileNo) {
     return res.status(400).json({ message: "Username and mobile are required" });
   }
 
@@ -101,11 +100,11 @@ app.post("/addDriver", async (req, res) => {
     const pool = await poolPromise;
     await pool.request()
       .input("username", username)
-      .input("mobileNo", mobile)
+      .input("mobileNo", mobileNo)
       .input("password", defaultPassword)
       .query(`
         INSERT INTO users (username, mobileNo, role, password)
-        VALUES (@username, @mobileNo, 'driver', @password)
+        VALUES (@username, @mobileNo, 'admin', @password)
       `);
 
     res.json({ message: "Driver added successfully" });

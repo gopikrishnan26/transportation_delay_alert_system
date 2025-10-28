@@ -1,14 +1,18 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import "./AdminDashboard.css";
+
+const API_BASE = "http://localhost:5000";
 
 function AdminDashboard() {
   const [activeForm, setActiveForm] = useState(null);
   const [drivers, setDrivers] = useState([]);
   const [routes, setRoutes] = useState([]);
   const [busStops, setBusStops] = useState([]);
+  const navigate = useNavigate();
 
   const [addDriverData, setAddDriverData] = useState({
-    driverName: "",
+    username: "",
     mobileNo: "",
   });
 
@@ -43,12 +47,12 @@ function AdminDashboard() {
   });
 
   useEffect(() => {
-    fetch("https:transportationdelayalertapp-dhhpdnakdsg6cgdh.centralindia-01.azurewebsites.net/drivers")
+    fetch(`${API_BASE}/drivers`)
       .then((res) => res.json())
       .then((data) => setDrivers(data))
       .catch((err) => console.error(err));
 
-    fetch("https:transportationdelayalertapp-dhhpdnakdsg6cgdh.centralindia-01.azurewebsites.net/routes")
+    fetch(`${API_BASE}/routes`)
       .then((res) => res.json())
       .then((data) => setRoutes(data))
       .catch((err) => console.error(err));
@@ -56,7 +60,7 @@ function AdminDashboard() {
 
   useEffect(() => {
     if (modifyBusStopData.routeID) {
-      fetch(`https:transportationdelayalertapp-dhhpdnakdsg6cgdh.centralindia-01.azurewebsites.net/bus-stops/${modifyBusStopData.routeID}`)
+      fetch(`${API_BASE}/bus-stops/${modifyBusStopData.routeID}`)
         .then((res) => res.json())
         .then((data) => setBusStops(data))
         .catch((err) => console.error(err));
@@ -65,7 +69,7 @@ function AdminDashboard() {
 
   const handleAssignDriver = async (e) => {
     e.preventDefault();
-    const res = await fetch("https:transportationdelayalertapp-dhhpdnakdsg6cgdh.centralindia-01.azurewebsites.net/assign-driver", {
+    const res = await fetch(`${API_BASE}/assign-driver`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(assignDriverData),
@@ -76,7 +80,7 @@ function AdminDashboard() {
 
   const handleAddBusStop = async (e) => {
     e.preventDefault();
-    const res = await fetch("https:transportationdelayalertapp-dhhpdnakdsg6cgdh.centralindia-01.azurewebsites.net/add-bus-stop", {
+    const res = await fetch(`${API_BASE}/add-bus-stop`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(addBusStopData),
@@ -87,7 +91,7 @@ function AdminDashboard() {
 
   const handleChangeDriver = async (e) => {
     e.preventDefault();
-    const res = await fetch("https:transportationdelayalertapp-dhhpdnakdsg6cgdh.centralindia-01.azurewebsites.net/change-driver", {
+    const res = await fetch(`${API_BASE}/change-driver`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(changeDriverData),
@@ -97,7 +101,7 @@ function AdminDashboard() {
   };
 
   const handleRemoveBusStop = async (stopID) => {
-    const res = await fetch(`https:transportationdelayalertapp-dhhpdnakdsg6cgdh.centralindia-01.azurewebsites.net/remove-bus-stop/${stopID}`, {
+    const res = await fetch(`${API_BASE}/remove-bus-stop/${stopID}`, {
       method: "DELETE",
     });
     const data = await res.json();
@@ -107,15 +111,45 @@ function AdminDashboard() {
 
   const handleAddDriver = async (e) => {
     e.preventDefault();
-    const res = await fetch("https:transportationdelayalertapp-dhhpdnakdsg6cgdh.centralindia-01.azurewebsites.net/addDriver", {
+    const res = await fetch(`${API_BASE}/addDriver`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(addDriverData),
     });
     const data = await res.json();
     alert(data.message);
-    
   }
+
+  const handleLogout = async () => {
+    try {
+      const userId = JSON.parse(localStorage.getItem("userId")); // assuming you stored user info as JSON
+      if (!userId) {
+        console.error("No user found in localStorage");
+        navigate("/");
+        return;
+      }
+
+      // Send logout request to backend
+      const res = await fetch("http://localhost:5000/logout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: userId }),
+      });
+
+      const data = await res.json();
+      console.log("Logout recorded:", data);
+
+      // Clear local storage
+      localStorage.removeItem("userId");
+      localStorage.removeItem("role");
+
+      navigate("/");
+    } catch (err) {
+      console.error("Logout failed:", err);
+      alert("Logout failed. Please try again.");
+    }
+  };
+
 
   return (
     <div className="admin-dashboard">
@@ -129,7 +163,7 @@ function AdminDashboard() {
         <button onClick={() => setActiveForm("addRoute")}>Add Route</button>
         <button onClick={() => setActiveForm("addDriver")}>Add Driver</button>
       </div>
-
+      <button className="admin-logout-button" onClick={handleLogout}>Logout</button>
       <div className="form-container">
         {/* Assign Driver */}
         {activeForm === "assignDriver" && (
@@ -293,14 +327,14 @@ function AdminDashboard() {
           <form
             onSubmit={async (e) => {
               e.preventDefault();
-              const res = await fetch("https:transportationdelayalertapp-dhhpdnakdsg6cgdh.centralindia-01.azurewebsites.net/add-route", {
+              const res = await fetch(`${API_BASE}/add-route`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(newRoute),
               });
               const data = await res.json();
               alert(data.message);
-              fetch("https:transportationdelayalertapp-dhhpdnakdsg6cgdh.centralindia-01.azurewebsites.net/routes")
+              fetch(`${API_BASE}/routes`)
                 .then((res) => res.json())
                 .then((data) => setRoutes(data));
               setNewRoute({ routeName: "", numStops: "" });
@@ -332,13 +366,13 @@ function AdminDashboard() {
 
         {/* Add Driver Form */}
         {activeForm === "addDriver" && (
-          <form onSubmit={handleAddDriver}>
-            <h2>Add Driver</h2>
+          <form className="dashboard-form" onSubmit={handleAddDriver}>
+            <h3>Add Driver</h3>
             <input
               type="text"
               placeholder="Driver Name"
-              value={addDriverData.driverName}
-              onChange={(e) => setAddDriverData({ ...addDriverData, driverName: e.target.value})}
+              value={addDriverData.username}
+              onChange={(e) => setAddDriverData({ ...addDriverData, username: e.target.value})}
               required
             />
             <input

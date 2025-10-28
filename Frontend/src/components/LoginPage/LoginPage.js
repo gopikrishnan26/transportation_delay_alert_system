@@ -32,7 +32,7 @@ function LoginPage() {
       if (res.ok) {
         // ✅ Correct key name — backend returns userID, not id
         localStorage.setItem("userId", data.userID);
-        localStorage.setItem("userRole", data.role);
+        localStorage.setItem("role", data.role);
 
         // ✅ Navigate by role
         if (data.role === "driver") {

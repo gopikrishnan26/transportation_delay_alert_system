@@ -62,10 +62,19 @@
   color: #fff;
 }
 
-.dashboard-form input,
+.dashboard-form input{
+  border-radius: 10px;
+  background-color: #fff;
+  color: #000;
+  outline: none;
+  font-size: 1rem;
+  transition: 0.3s;
+  padding: 10px;
+  border: none;
+}
 .dashboard-form select {
   width: 100%;
-  padding: 0.8rem;
+  padding: 0.8rem; 
   border: none;
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.9);
@@ -124,6 +133,19 @@
 
 .bus-stop-list button:hover {
   background: #ff4b5c;
+}
+
+.admin-logout-button {
+  margin-top: 2rem;
+  position: absolute;
+  top: 40px;
+  right: 80px;
+  background-color: red;
+  color: #fff;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
 }
 
 @keyframes fadeIn {
