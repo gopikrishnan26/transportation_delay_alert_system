@@ -1,88 +1,69 @@
-trigger:
-- main
+# =====================================================
+# Azure Pipeline for Backend Docker Build & Push
+# =====================================================
 
+trigger:
+- main   # run pipeline when changes are pushed to main branch
+
+# Use your self-hosted agent
 pool:
-  name: SelfHostPool
+  name: 'SelfHostPool'   # 👈 update if your pool name differs
 
 variables:
-  NODE_VERSION: '20.x'
+  # Docker image name (you can change this)
+  imageName: 'backend-service'
 
-stages:
-# ========================================
-# 1️⃣ Build Frontend & Backend
-# ========================================
-- stage: Build
-  displayName: 'Build Frontend & Backend'
-  jobs:
-  - job: BuildJob
-    displayName: 'Build Job'
-    pool:
-      name: SelfHostPool
-    steps:
+  # Azure Container Registry name (no .azurecr.io)
+  azureContainerRegistry: 'tdasRegistry'   # 👈 replace with your ACR name
 
-    # 1️⃣ Checkout code
-    - checkout: self
+steps:
+# =====================================================
+# Step 1: Check out code
+# =====================================================
+- task: Checkout@1
+  displayName: 'Checkout repository'
+  inputs:
+    clean: true
 
-    # 2️⃣ Use Node.js
-    - task: NodeTool@0
-      inputs:
-        versionSpec: '$(NODE_VERSION)'
-      displayName: 'Use Node.js $(NODE_VERSION)'
+# =====================================================
+# Step 2: Log in to Azure using Service Principal
+# =====================================================
+- task: AzureCLI@2
+  displayName: 'Azure CLI - Login with Service Principal'
+  inputs:
+    azureSubscription: ''
+    scriptType: 'bash'
+    scriptLocation: 'inlineScript'
+    inlineScript: |
+      echo "Logging into Azure using Service Principal..."
+      az login --service-principal \
+        -u $(AZURE_SP_APP_ID) \
+        -p $(AZURE_SP_PASSWORD) \
+        --tenant $(AZURE_SP_TENANT_ID)
 
-    # 3️⃣ Build Frontend
-    - script: |
-        cd Frontend
-        npm install
-        npm run build
-      displayName: 'Build Frontend'
+# =====================================================
+# Step 3: Log in to Azure Container Registry
+# =====================================================
+- script: |
+    echo "Logging into Azure Container Registry..."
+    az acr login --name $(azureContainerRegistry)
+  displayName: 'Login to ACR'
 
-    # 4️⃣ Copy frontend build to backend/public
-    - script: |
-        if not exist Backend\public mkdir Backend\public
-        xcopy Frontend\build Backend\public /E /I /Y
-      displayName: 'Copy Frontend Build to Backend'
+# =====================================================
+# Step 4: Build and Push Docker Image
+# =====================================================
+- script: |
+    echo "Building Docker image..."
+    docker build -t $(azureContainerRegistry).azurecr.io/$(imageName):latest .
 
-    # 5️⃣ Package backend (without node_modules)
-    - script: |
-        cd Backend
-        if exist node_modules rmdir /s /q node_modules
-        powershell -Command "Compress-Archive -Path '*' -DestinationPath '../backend.zip' -Force"
-      displayName: 'Package Backend for Deployment'
+    echo "Pushing Docker image to ACR..."
+    docker push $(azureContainerRegistry).azurecr.io/$(imageName):latest
+  displayName: 'Build and Push Docker Image'
 
-    # 6️⃣ Publish backend.zip as pipeline artifact
-    - task: PublishPipelineArtifact@1
-      inputs:
-        targetPath: '$(Build.SourcesDirectory)/backend.zip'
-        artifact: 'release'
-      displayName: 'Publish Backend Artifact'
-
-# ========================================
-# 2️⃣ Deploy to Azure Web App
-# ========================================
-- stage: Deploy
-  displayName: 'Deploy to Azure Web App'
-  jobs:
-  - deployment: DeployJob
-    displayName: 'Deploy Backend'
-    environment: 'Production'
-    pool:
-      name: SelfHostPool
-    strategy:
-      runOnce:
-        deploy:
-          steps:
-
-          # 1️⃣ Download backend artifact
-          - task: DownloadPipelineArtifact@2
-            inputs:
-              artifactName: 'release'
-              targetPath: '$(Pipeline.Workspace)'
-
-          # 2️⃣ Deploy backend.zip to Azure Web App
-          - task: AzureWebApp@1
-            inputs:
-              azureSubscription: 'tdas_sc'         # Azure service connection
-              appType: 'webApp'
-              appName: 'transportationDelayAlertApp'
-              package: '$(Pipeline.Workspace)/backend.zip'
-              deploymentMethod: 'auto'            # Azure detects Node app and runs .deployment
+# =====================================================
+# Step 5: Logout for cleanup
+# =====================================================
+- script: |
+    docker logout $(azureContainerRegistry).azurecr.io
+    az logout
+  displayName: 'Logout'
