@@ -104,13 +104,72 @@ app.post("/addDriver", async (req, res) => {
       .input("password", defaultPassword)
       .query(`
         INSERT INTO users (username, mobileNo, role, password)
-        VALUES (@username, @mobileNo, 'admin', @password)
+        VALUES (@username, @mobileNo, 'driver', @password)
       `);
 
     res.json({ message: "Driver added successfully" });
   } catch (err) {
     console.error("DB Error:", err.message);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ✅ UPSERT SUBSCRIBER (students_faculty)
+app.post("/subscribers", async (req, res) => {
+  const { name, routeName, stopName, mobileNo } = req.body;
+  if (!name || !mobileNo) {
+    return res.status(400).json({ message: "name and mobileNo are required" });
+  }
+
+  try {
+    const pool = await poolPromise;
+    // If exists, update; else insert
+    const existsRes = await pool.request()
+      .input("mobileNo", mobileNo)
+      .query(`SELECT id FROM students_faculty WHERE mobileNo = @mobileNo`);
+
+    if (existsRes.recordset.length > 0) {
+      await pool.request()
+        .input("name", name)
+        .input("routeName", routeName || null)
+        .input("stopName", stopName || null)
+        .input("mobileNo", mobileNo)
+        .query(`
+          UPDATE students_faculty
+          SET name = @name, routeName = @routeName, stopName = @stopName
+          WHERE mobileNo = @mobileNo
+        `);
+      return res.json({ message: "Subscription updated" });
+    }
+
+    await pool.request()
+      .input("name", name)
+      .input("routeName", routeName || null)
+      .input("stopName", stopName || null)
+      .input("mobileNo", mobileNo)
+      .query(`
+        INSERT INTO students_faculty (name, routeName, stopName, mobileNo)
+        VALUES (@name, @routeName, @stopName, @mobileNo)
+      `);
+    res.json({ message: "Subscribed successfully" });
+  } catch (err) {
+    console.error("DB Error:", err.message);
+    res.status(500).json({ message: "DB Error" });
+  }
+});
+
+// ✅ GET SUBSCRIBER BY MOBILE
+app.get("/subscribers/:mobileNo", async (req, res) => {
+  try {
+    const pool = await poolPromise;
+    const result = await pool.request()
+      .input("mobileNo", req.params.mobileNo)
+      .query(`SELECT id, name, routeName, stopName, mobileNo FROM students_faculty WHERE mobileNo = @mobileNo`);
+    if (result.recordset.length === 0) return res.status(404).json({ message: "Not found" });
+    res.json(result.recordset[0]);
+  } catch (err) {
+    console.error("DB Error:", err.message);
+    res.status(500).json({ message: "DB Error" });
   }
 });
 
@@ -244,7 +303,7 @@ app.get("/driver-route/:driverID", async (req, res) => {
     const stopsResult = await pool.request()
       .input("routeID", route.routeID)
       .query(`
-        SELECT stopName, arrivalTime, departureTime
+        SELECT stopID, stopName, arrivalTime
         FROM busStops
         WHERE routeID = @routeID
         ORDER BY arrivalTime ASC
@@ -266,7 +325,7 @@ app.get("/drivers", async (req, res) => {
   try {
     const pool = await poolPromise;
     const result = await pool.request().query(`
-      SELECT userID, username FROM users WHERE role = 'driver'
+      SELECT userID, username, mobileNo FROM users WHERE role = 'driver'
     `);
     res.json(result.recordset);
   } catch (err) {
@@ -298,13 +357,123 @@ app.get("/bus-stops/:routeID", async (req, res) => {
     const result = await pool.request()
       .input("routeID", routeID)
       .query(`
-        SELECT stopID, stopName, arrivalTime, departureTime
+        SELECT stopID, stopName, arrivalTime
         FROM busStops
         WHERE routeID = @routeID
         ORDER BY arrivalTime ASC
       `);
 
     res.json(result.recordset);
+  } catch (err) {
+    console.error("DB Error:", err.message);
+    res.status(500).json({ message: "DB Error" });
+  }
+});
+
+// ✅ ARRIVAL LOGGING AND DELAY CALCULATION
+app.post("/arrive", async (req, res) => {
+  const { stopID, driverID } = req.body;
+
+  if (!stopID || !driverID) {
+    return res.status(400).json({ message: "stopID and driverID are required" });
+  }
+
+  try {
+    const pool = await poolPromise;
+
+    // Get stop info and route
+    const stopResult = await pool.request()
+      .input("stopID", stopID)
+      .query(`
+        SELECT bs.stopID, bs.routeID, bs.stopName, bs.arrivalTime
+        FROM busStops bs
+        WHERE bs.stopID = @stopID
+      `);
+
+    const stop = stopResult.recordset[0];
+    if (!stop) return res.status(404).json({ message: "Stop not found" });
+
+    // Compute delay (basic): compare now vs scheduled arrival (assumes HH:mm format)
+    const now = new Date();
+    const scheduled = stop.arrivalTime;
+
+    let delayMinutes = 0;
+    if (scheduled) {
+      const [hh, mm] = String(scheduled).split(":");
+      if (!isNaN(hh) && !isNaN(mm)) {
+        const scheduledDate = new Date(now);
+        scheduledDate.setHours(parseInt(hh, 10), parseInt(mm, 10), 0, 0);
+        delayMinutes = Math.max(0, Math.round((now.getTime() - scheduledDate.getTime()) / 60000));
+      }
+    }
+
+    const threshold = parseInt(process.env.DELAY_MINUTES_THRESHOLD || "5", 10);
+    const status = delayMinutes > threshold ? "Delayed" : "On time";
+
+    // Insert arrival record
+    await pool.request()
+      .input("routeID", stop.routeID)
+      .input("stopID", stop.stopID)
+      .input("driverID", driverID)
+      .input("scheduledArrival", scheduled || null)
+      .input("delayMinutes", delayMinutes)
+      .input("status", status)
+      .query(`
+        INSERT INTO arrivals (routeID, stopID, driverID, scheduledArrival, actualArrival, delayMinutes, status)
+        VALUES (@routeID, @stopID, @driverID, @scheduledArrival, GETDATE(), @delayMinutes, @status)
+      `);
+
+    // Minimal notification dispatcher placeholder
+    if (delayMinutes > threshold) {
+      console.log(
+        `Dispatcher: Route ${stop.routeID}, Stop ${stop.stopName} delayed by ${delayMinutes} mins. (Would send SMS here)`
+      );
+    }
+
+    res.json({ delayMinutes, status, threshold });
+  } catch (err) {
+    console.error("DB Error:", err.message);
+    res.status(500).json({ message: "DB Error" });
+  }
+});
+
+// ✅ REPORT LATE (from student/faculty when no notification received)
+app.post("/report-late", async (req, res) => {
+  try {
+    const { routeName, stopName, mobileNo, note } = req.body;
+    if (!routeName || !stopName || !mobileNo) {
+      return res.status(400).json({ message: "routeName, stopName, mobileNo are required" });
+    }
+
+    // Heuristic "GenAI" placeholder: determine affected downstream stops and reason
+    const reason = "Possible congestion due to traffic or signal delays";
+
+    // Find routeID and stops
+    const pool = await poolPromise;
+    const routeRes = await pool.request().query(`
+      SELECT routeID FROM driverRoutes WHERE routeName = '${routeName.replace(/'/g, "''")}'
+    `);
+    const route = routeRes.recordset[0];
+    if (!route) return res.status(404).json({ message: "Route not found" });
+
+    const stopsRes = await pool.request()
+      .input("routeID", route.routeID)
+      .query(`
+        SELECT stopID, stopName, arrivalTime
+        FROM busStops
+        WHERE routeID = @routeID
+        ORDER BY arrivalTime ASC
+      `);
+
+    const stops = stopsRes.recordset || [];
+    const currentIdx = stops.findIndex(s => s.stopName === stopName);
+    const affectedStops = currentIdx >= 0 ? stops.slice(currentIdx).map(s => s.stopName) : stops.map(s => s.stopName);
+
+    console.log(
+      `ReportLate Dispatcher: Route ${routeName}, from stop ${stopName}. Affected stops: ${affectedStops.join(", ")}. Reason: ${reason}. (Would send SMS here)`
+    );
+
+    res.json({ message: "Report received", reason, affectedStops });
   } catch (err) {
     console.error("DB Error:", err.message);
     res.status(500).json({ message: "DB Error" });

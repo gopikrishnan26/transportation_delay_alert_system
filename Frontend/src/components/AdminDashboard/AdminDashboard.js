@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import "./AdminDashboard.css";
 
-const API_BASE = "http://localhost:5000";
+import { API_BASE } from "../../utils/api";
 
 function AdminDashboard() {
   const [activeForm, setActiveForm] = useState(null);
@@ -194,7 +194,7 @@ function AdminDashboard() {
               <option value="">Select Driver</option>
               {drivers.map((d) => (
                 <option key={d.userID} value={d.userID}>
-                  {d.mobileNo}
+                  {d.username} ({d.mobileNo})
                 </option>
               ))}
             </select>
@@ -282,7 +282,7 @@ function AdminDashboard() {
               <option value="">Select New Driver</option>
               {drivers.map((d) => (
                 <option key={d.userID} value={d.userID}>
-                  {d.email}
+                  {d.username} ({d.mobileNo})
                 </option>
               ))}
             </select>
