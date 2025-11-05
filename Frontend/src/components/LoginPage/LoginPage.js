@@ -1,13 +1,14 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "./LoginPage.css"; // Attractive CSS file
+import { API_BASE } from "../../utils/api";
 
 function LoginPage() {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
     mobileNo: "",
     password: "",
-    role: "driver",
+    role: "",
   });
 
   const handleChange = (e) => {
@@ -21,7 +22,7 @@ function LoginPage() {
     e.preventDefault();
 
     try {
-      const res = await fetch("http://localhost:5000/login", { //https:transportationdelayalertapp-dhhpdnakdsg6cgdh.centralindia-01.azurewebsites.net
+      const res = await fetch(`${API_BASE}/login`, { //https:transportationdelayalertapp-dhhpdnakdsg6cgdh.centralindia-01.azurewebsites.net
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),
@@ -39,9 +40,11 @@ function LoginPage() {
           navigate("/driver-dashboard");
         } else if (data.role === "admin") {
           navigate("/admin-dashboard");
+        } else if (data.role === "student/faculty") {
+          navigate("/subscriber-dashboard");
         }
       } else {
-        alert(data.message || "Invalid credentials");
+        alert(data.message);
       }
     } catch (error) {
       console.error("Error:", error);
@@ -81,8 +84,11 @@ function LoginPage() {
           onChange={handleChange}
           className="login-select"
         >
+          <option value="">Select your role</option>
           <option value="driver">Driver</option>
           <option value="admin">Admin</option>
+          <option value="student/faculty">Student</option>
+          <option value="student/faculty">Faculty</option>
         </select>
 
         <button type="submit" className="login-button">

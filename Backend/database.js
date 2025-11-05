@@ -59,8 +59,36 @@ export async function initializeTables() {
       routeID INT NOT NULL,
       stopName NVARCHAR(100) NOT NULL,
       arrivalTime NVARCHAR(50),
-      departureTime NVARCHAR(50),
       FOREIGN KEY (routeID) REFERENCES driverRoutes(routeID)
+    );
+  `);
+
+  await pool.request().query(`
+    IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='arrivals' AND xtype='U')
+    CREATE TABLE arrivals (
+      arrivalID INT IDENTITY(1,1) PRIMARY KEY,
+      routeID INT NOT NULL,
+      stopID INT NOT NULL,
+      driverID INT NOT NULL,
+      scheduledArrival NVARCHAR(50) NULL,
+      actualArrival DATETIME2 NOT NULL DEFAULT GETDATE(),
+      delayMinutes INT NULL,
+      status NVARCHAR(50) NULL,
+      created_at DATETIME2 DEFAULT GETDATE(),
+      FOREIGN KEY (routeID) REFERENCES driverRoutes(routeID),
+      FOREIGN KEY (stopID) REFERENCES busStops(stopID),
+      FOREIGN KEY (driverID) REFERENCES users(userID)
+    );
+  `);
+
+  await pool.request().query(`
+    IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='students_faculty' AND xtype='U')
+    CREATE TABLE students_faculty (
+      id INT IDENTITY(1,1) PRIMARY KEY,
+      name NVARCHAR(100) NOT NULL,
+      routeName NVARCHAR(100) NULL,
+      stopName NVARCHAR(100) NULL,
+      mobileNo NVARCHAR(20) NOT NULL
     );
   `);
 
