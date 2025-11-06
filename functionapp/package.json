@@ -1,0 +1,15 @@
+{
+  "name": "tdas-functionapp",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@azure/storage-queue": "^12.15.0",
+    "mssql": "^12.0.0"
+  },
+  "scripts": {
+    "start": "func start"
+  }
+}
+
+
