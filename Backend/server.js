@@ -54,6 +54,7 @@ app.post("/login", async (req, res) => {
     res.json({
       userID: user.userID,
       mobileNo: user.mobileNo,
+      username: user.username,
       role: user.role,
       login_timestamp: loginTime,
     });

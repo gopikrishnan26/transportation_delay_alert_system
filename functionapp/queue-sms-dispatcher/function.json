@@ -1,0 +1,13 @@
+{
+  "bindings": [
+    {
+      "name": "queueItem",
+      "type": "queueTrigger",
+      "direction": "in",
+      "queueName": "%DELAY_QUEUE_NAME%",
+      "connection": "AZURE_STORAGE_QUEUE_CONN"
+    }
+  ]
+}
+
+

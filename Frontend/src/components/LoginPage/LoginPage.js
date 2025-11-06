@@ -32,15 +32,18 @@ function LoginPage() {
 
       if (res.ok) {
         // ✅ Correct key name — backend returns userID, not id
-        localStorage.setItem("userId", data.userID);
+        localStorage.setItem("userID", data.userID);
         localStorage.setItem("role", data.role);
 
         // ✅ Navigate by role
-        if (data.role === "driver") {
+        if (data.role === "driver") 
           navigate("/driver-dashboard");
-        } else if (data.role === "admin") {
+        else if (data.role === "admin")
           navigate("/admin-dashboard");
-        } else if (data.role === "student/faculty") {
+        else if (data.role === "student" || data.role === "faculty")
+        {
+          localStorage.setItem("mobileNo", data.mobileNo);
+          localStorage.setItem("username", data.username);
           navigate("/subscriber-dashboard");
         }
       } else {
