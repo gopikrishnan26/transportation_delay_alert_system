@@ -22,7 +22,7 @@ function LoginPage() {
     e.preventDefault();
 
     try {
-      const res = await fetch(`${API_BASE}/login`, { //https:transportationdelayalertapp-dhhpdnakdsg6cgdh.centralindia-01.azurewebsites.net
+      const res = await fetch(`${API_BASE}/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),
@@ -90,8 +90,8 @@ function LoginPage() {
           <option value="">Select your role</option>
           <option value="driver">Driver</option>
           <option value="admin">Admin</option>
-          <option value="student/faculty">Student</option>
-          <option value="student/faculty">Faculty</option>
+          <option value="student">Student</option>
+          <option value="faculty">Faculty</option>
         </select>
 
         <button type="submit" className="login-button">
