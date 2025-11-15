@@ -115,65 +115,6 @@ app.post("/addDriver", async (req, res) => {
   }
 });
 
-// ✅ UPSERT SUBSCRIBER (students_faculty)
-app.post("/subscribers", async (req, res) => {
-  const { name, routeName, stopName, mobileNo } = req.body;
-  if (!name || !mobileNo) {
-    return res.status(400).json({ message: "name and mobileNo are required" });
-  }
-
-  try {
-    const pool = await poolPromise;
-    // If exists, update; else insert
-    const existsRes = await pool.request()
-      .input("mobileNo", mobileNo)
-      .query(`SELECT id FROM students_faculty WHERE mobileNo = @mobileNo`);
-
-    if (existsRes.recordset.length > 0) {
-      await pool.request()
-        .input("name", name)
-        .input("routeName", routeName || null)
-        .input("stopName", stopName || null)
-        .input("mobileNo", mobileNo)
-        .query(`
-          UPDATE students_faculty
-          SET name = @name, routeName = @routeName, stopName = @stopName
-          WHERE mobileNo = @mobileNo
-        `);
-      return res.json({ message: "Subscription updated" });
-    }
-
-    await pool.request()
-      .input("name", name)
-      .input("routeName", routeName || null)
-      .input("stopName", stopName || null)
-      .input("mobileNo", mobileNo)
-      .query(`
-        INSERT INTO students_faculty (name, routeName, stopName, mobileNo)
-        VALUES (@name, @routeName, @stopName, @mobileNo)
-      `);
-    res.json({ message: "Subscribed successfully" });
-  } catch (err) {
-    console.error("DB Error:", err.message);
-    res.status(500).json({ message: "DB Error" });
-  }
-});
-
-// ✅ GET SUBSCRIBER BY MOBILE
-app.get("/subscribers/:mobileNo", async (req, res) => {
-  try {
-    const pool = await poolPromise;
-    const result = await pool.request()
-      .input("mobileNo", req.params.mobileNo)
-      .query(`SELECT id, name, routeName, stopName, mobileNo FROM students_faculty WHERE mobileNo = @mobileNo`);
-    if (result.recordset.length === 0) return res.status(404).json({ message: "Not found" });
-    res.json(result.recordset[0]);
-  } catch (err) {
-    console.error("DB Error:", err.message);
-    res.status(500).json({ message: "DB Error" });
-  }
-});
-
 // ✅ ADD ROUTE
 app.post("/add-route", async (req, res) => {
   const { routeName, numStops } = req.body;
@@ -475,6 +416,133 @@ app.post("/report-late", async (req, res) => {
     );
 
     res.json({ message: "Report received", reason, affectedStops });
+  } catch (err) {
+    console.error("DB Error:", err.message);
+    res.status(500).json({ message: "DB Error" });
+  }
+});
+
+app.post("/subscribers", async (req, res) => {
+  const { userID, name, routeName, stopName, mobileNo } = req.body;
+
+  try {
+    const pool = await poolPromise;
+
+    // If userID provided -> operate by userID (recommended)
+    if (userID) {
+      // Update mobile in users if provided
+      if (mobileNo) {
+        await pool.request()
+          .input("mobileNo", mobileNo)
+          .input("userID", userID)
+          .query(`
+            UPDATE users SET mobileNo = @mobileNo WHERE userID = @userID
+          `);
+      }
+
+      // Upsert students_faculty by userID
+      const existsRes = await pool.request()
+        .input("userID", userID)
+        .query(`SELECT userID FROM students_faculty WHERE userID = @userID`);
+
+      if (existsRes.recordset.length > 0) {
+        await pool.request()
+          .input("routeName", routeName || null)
+          .input("stopName", stopName || null)
+          .input("userID", userID)
+          .query(`
+            UPDATE students_faculty
+            SET routeName = @routeName, stopName = @stopName
+            WHERE userID = @userID
+          `);
+        return res.json({ message: "Subscription updated (by userID)" });
+      } else {
+        await pool.request()
+          .input("userID", userID)
+          .input("routeName", routeName || null)
+          .input("stopName", stopName || null)
+          .query(`
+            INSERT INTO students_faculty (userID, routeName, stopName)
+            VALUES (@userID, @routeName, @stopName)
+          `);
+        return res.json({ message: "Subscribed successfully (by userID)" });
+      }
+    }
+
+    // Backwards-compatible path: use mobileNo to upsert (old behavior)
+    if (!name || !mobileNo) {
+      return res.status(400).json({ message: "name and mobileNo are required when userID is not provided" });
+    }
+
+    // Existing mobile-based behavior (legacy)
+    const existsRes = await pool.request()
+      .input("mobileNo", mobileNo)
+      .query(`SELECT id FROM students_faculty WHERE mobileNo = @mobileNo`);
+
+    if (existsRes.recordset.length > 0) {
+      await pool.request()
+        .input("name", name)
+        .input("routeName", routeName || null)
+        .input("stopName", stopName || null)
+        .input("mobileNo", mobileNo)
+        .query(`
+          UPDATE students_faculty
+          SET name = @name, routeName = @routeName, stopName = @stopName
+          WHERE mobileNo = @mobileNo
+        `);
+      return res.json({ message: "Subscription updated (legacy mobile-based)" });
+    }
+
+    await pool.request()
+      .input("name", name)
+      .input("routeName", routeName || null)
+      .input("stopName", stopName || null)
+      .input("mobileNo", mobileNo)
+      .query(`
+        INSERT INTO students_faculty (name, routeName, stopName, mobileNo)
+        VALUES (@name, @routeName, @stopName, @mobileNo)
+      `);
+    res.json({ message: "Subscribed successfully (legacy mobile-based)" });
+  } catch (err) {
+    console.error("DB Error:", err.message);
+    res.status(500).json({ message: "DB Error" });
+  }
+});
+
+// GET SUBSCRIBER BY MOBILE (legacy)
+app.get("/subscribers/:mobileNo", async (req, res) => {
+  try {
+    const pool = await poolPromise;
+    const result = await pool.request()
+      .input("mobileNo", req.params.mobileNo)
+      .query(`SELECT id, name, routeName, stopName, mobileNo FROM students_faculty WHERE mobileNo = @mobileNo`);
+    if (result.recordset.length === 0) return res.status(404).json({ message: "Not found" });
+    res.json(result.recordset[0]);
+  } catch (err) {
+    console.error("DB Error:", err.message);
+    res.status(500).json({ message: "DB Error" });
+  }
+});
+
+app.get("/subscriber/:userID", async (req, res) => {
+  try {
+    const pool = await poolPromise;
+    const userId = parseInt(req.params.userID, 10);
+    if (isNaN(userId)) return res.status(400).json({ message: "Invalid userID" });
+
+    // Left join so we still return user info if students_faculty row missing
+    const result = await pool.request()
+      .input("userID", userId)
+      .query(`
+        SELECT u.userID, u.username, u.mobileNo, u.role,
+               sf.routeName, sf.stopName
+        FROM users u
+        LEFT JOIN students_faculty sf ON sf.userID = u.userID
+        WHERE u.userID = @userID
+      `);
+
+    if (result.recordset.length === 0) return res.status(404).json({ message: "User not found" });
+    res.json(result.recordset[0]);
   } catch (err) {
     console.error("DB Error:", err.message);
     res.status(500).json({ message: "DB Error" });

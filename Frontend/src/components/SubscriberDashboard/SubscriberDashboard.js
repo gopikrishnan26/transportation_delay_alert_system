@@ -1,54 +1,100 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { API_BASE } from "../../utils/api";
 
 function SubscriberDashboard() {
   const navigate = useNavigate();
-  const [name, setName] = useState("");
+  const [username, setUsername] = useState("");
   const [mobileNo, setMobileNo] = useState("");
   const [routeName, setRouteName] = useState("");
   const [stopName, setStopName] = useState("");
   const [routes, setRoutes] = useState([]);
   const [stops, setStops] = useState([]);
   const [statusMsg, setStatusMsg] = useState("");
+  const [isEditing, setIsEditing] = useState(false);
+
+  const userID = localStorage.getItem("userID");
+  const role = localStorage.getItem("role");
 
   useEffect(() => {
-    fetch(`${API_BASE}/routes`).then(r => r.json()).then(setRoutes).catch(console.error);
+    fetch(`${API_BASE}/routes`)
+      .then((r) => r.json())
+      .then(setRoutes)
+      .catch(console.error);
   }, []);
 
   useEffect(() => {
-    const selected = routes.find(r => r.routeName === routeName);
+    const selected = routes.find((r) => r.routeName === routeName);
     if (selected) {
-      fetch(`${API_BASE}/bus-stops/${selected.routeID}`).then(r => r.json()).then(setStops).catch(console.error);
+      fetch(`${API_BASE}/bus-stops/${selected.routeID}`)
+        .then((r) => r.json())
+        .then(setStops)
+        .catch(console.error);
     } else {
       setStops([]);
     }
   }, [routeName, routes]);
 
+  // AUTO-LOAD profile + subscription for logged-in user
+  useEffect(() => {
+    const loadProfile = async () => {
+      if (!userID) {
+        setStatusMsg("Not logged in");
+        return;
+      }
+      try {
+        const res = await fetch(`${API_BASE}/subscriber/${userID}`);
+        if (!res.ok) {
+          setStatusMsg("Failed to load profile");
+          return;
+        }
+        const data = await res.json();
+        setUsername(data.username || "");
+        setMobileNo(data.mobileNo || "");
+        setRouteName(data.routeName || "");
+        setStopName(data.stopName || "");
+        setStatusMsg("");
+      } catch (e) {
+        console.error(e);
+        setStatusMsg("Failed to load profile");
+      }
+    };
+    loadProfile();
+  }, [userID]);
+
   const handleLoadExisting = async () => {
+    // legacy fallback if someone wants to load by mobile
     if (!mobileNo) return;
     try {
       const res = await fetch(`${API_BASE}/subscribers/${mobileNo}`);
       if (!res.ok) { setStatusMsg("No existing subscription found"); return; }
       const data = await res.json();
-      setName(data.name || "");
+      // note: legacy data has name/mobile in students_faculty, but primary source is users
       setRouteName(data.routeName || "");
       setStopName(data.stopName || "");
-      setStatusMsg("Loaded your existing subscription");
+      setStatusMsg("Loaded your existing subscription (legacy)");
     } catch (e) { console.error(e); setStatusMsg("Failed to load subscription"); }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!userID) {
+      setStatusMsg("Not logged in");
+      return;
+    }
     try {
       const res = await fetch(`${API_BASE}/subscribers`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, routeName, stopName, mobileNo })
+        body: JSON.stringify({ userID: parseInt(userID, 10), mobileNo, routeName, stopName })
       });
       const data = await res.json();
       setStatusMsg(data.message || "Saved");
-    } catch (e) { console.error(e); setStatusMsg("Failed to save"); }
+      if (res.ok) setIsEditing(false);
+    } catch (e) {
+      console.error(e);
+      setStatusMsg("Failed to save");
+    }
   };
 
   const handleReportLate = async () => {
@@ -67,7 +113,7 @@ function SubscriberDashboard() {
 
   return (
     <div style={{ padding: "0", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
-      {/* Navbar (same style as driver) */}
+      {/* Navbar */}
       <div style={{
         display: "flex",
         alignItems: "center",
@@ -92,27 +138,42 @@ function SubscriberDashboard() {
         <h2 style={{ marginTop: 0 }}>Subscribe for Delay Alerts</h2>
 
         <form onSubmit={handleSubmit} style={{ display: "grid", gap: "0.75rem", maxWidth: 480 }}>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" required />
-          <input value={mobileNo} onChange={(e) => setMobileNo(e.target.value)} placeholder="Mobile Number" required />
+          {/* Name: readonly - must not be changed */}
+          <input value={username} placeholder="Name" readOnly />
 
-          <select value={routeName} onChange={(e) => setRouteName(e.target.value)} required>
-            <option value="">Select Route</option>
+          {/* Mobile: editable when isEditing true */}
+          <input value={mobileNo} onChange={(e) => setMobileNo(e.target.value)} placeholder="Mobile Number" required disabled={!isEditing} />
+
+          <select value={routeName} onChange={(e) => setRouteName(e.target.value)} required disabled={!isEditing}>
+            <option value="">{/* Leave blank display if no route */}Select Route</option>
             {routes.map(r => (
               <option key={r.routeID} value={r.routeName}>{r.routeName}</option>
             ))}
           </select>
 
-          <select value={stopName} onChange={(e) => setStopName(e.target.value)} required>
-            <option value="">Select Stop</option>
+          <select value={stopName} onChange={(e) => setStopName(e.target.value)} required disabled={!isEditing}>
+            <option value="">{/* Leave blank display if no stop */}Select Stop</option>
             {stops.map(s => (
               <option key={s.stopID} value={s.stopName}>{s.stopName}</option>
             ))}
           </select>
 
           <div style={{ display: "flex", gap: "0.5rem" }}>
-            <button type="submit" style={{ background: "#2e7d32", color: "#fff", border: "none", padding: "0.5rem 0.9rem", borderRadius: 4, cursor: "pointer" }}>Save</button>
-            <button type="button" onClick={handleLoadExisting} style={{ background: "#616161", color: "#fff", border: "none", padding: "0.5rem 0.9rem", borderRadius: 4, cursor: "pointer" }}>Load Existing</button>
-            <button type="button" onClick={handleReportLate} style={{ background: "#f57c00", color: "#fff", border: "none", padding: "0.5rem 0.9rem", borderRadius: 4, cursor: "pointer" }}>Report Late</button>
+            <button type="button" onClick={() => setIsEditing(true)} style={{ background: "#0288d1", color: "#fff", border: "none", padding: "0.5rem 0.9rem", borderRadius: 4, cursor: "pointer" }}>
+              Edit
+            </button>
+
+            <button type="submit" disabled={!isEditing} style={{ background: isEditing ? "#2e7d32" : "#9e9e9e", color: "#fff", border: "none", padding: "0.5rem 0.9rem", borderRadius: 4, cursor: isEditing ? "pointer" : "not-allowed" }}>
+              Save
+            </button>
+
+            <button type="button" onClick={handleLoadExisting} style={{ background: "#616161", color: "#fff", border: "none", padding: "0.5rem 0.9rem", borderRadius: 4, cursor: "pointer" }}>
+              Load Existing
+            </button>
+
+            <button type="button" onClick={handleReportLate} style={{ background: "#f57c00", color: "#fff", border: "none", padding: "0.5rem 0.9rem", borderRadius: 4, cursor: "pointer" }}>
+              Report Late
+            </button>
           </div>
         </form>
 
@@ -123,5 +184,3 @@ function SubscriberDashboard() {
 }
 
 export default SubscriberDashboard;
-
-
