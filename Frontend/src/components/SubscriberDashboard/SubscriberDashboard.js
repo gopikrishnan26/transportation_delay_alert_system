@@ -62,25 +62,6 @@ function SubscriberDashboard() {
     loadProfile();
   }, [userID]);
 
-  const handleLoadExisting = async () => {
-    // legacy fallback if someone wants to load by mobile
-    if (!mobileNo) return;
-    try {
-      setStatusMsg("Loading legacy subscription...");
-      const res = await fetch(`${API_BASE}/subscribers/${mobileNo}`);
-      if (!res.ok) {
-        if (res.status === 404) setStatusMsg("No legacy subscription found for this mobile number");
-        else setStatusMsg(`Lookup failed: ${res.status}`);
-        return;
-      }
-      const data = await res.json();
-      // note: legacy data has name/mobile in students_faculty, but primary source is users
-      setRouteName(data.routeName || "");
-      setStopName(data.stopName || "");
-      setStatusMsg("Loaded your existing subscription (legacy)");
-    } catch (e) { console.error(e); setStatusMsg("Failed to load subscription"); }
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!userID) {
@@ -170,16 +151,6 @@ function SubscriberDashboard() {
 
             <button type="submit" disabled={!isEditing} style={{ background: isEditing ? "#2e7d32" : "#9e9e9e", color: "#fff", border: "none", padding: "0.5rem 0.9rem", borderRadius: 4, cursor: isEditing ? "pointer" : "not-allowed" }}>
               Save
-            </button>
-
-            <button
-              type="button"
-              onClick={handleLoadExisting}
-              disabled={!isEditing || !mobileNo}
-              title={!isEditing ? "Click Edit to enable" : !mobileNo ? "Enter mobile number first" : "Load legacy subscription by mobile"}
-              style={{ background: "#616161", color: "#fff", border: "none", padding: "0.5rem 0.9rem", borderRadius: 4, cursor: (!isEditing || !mobileNo) ? "not-allowed" : "pointer" }}
-            >
-              Load Legacy Subscription
             </button>
 
             <button type="button" onClick={handleReportLate} style={{ background: "#f57c00", color: "#fff", border: "none", padding: "0.5rem 0.9rem", borderRadius: 4, cursor: "pointer" }}>
