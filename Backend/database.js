@@ -83,13 +83,13 @@ export async function initializeTables() {
 
   await pool.request().query(`
     IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='students_faculty' AND xtype='U')
-    CREATE TABLE students_faculty (
-      id INT IDENTITY(1,1) PRIMARY KEY,
-      name NVARCHAR(100) NOT NULL,
-      routeName NVARCHAR(100) NULL,
-      stopName NVARCHAR(100) NULL,
-      mobileNo NVARCHAR(20) NOT NULL
-    );
+      CREATE TABLE students_faculty (
+        id INT IDENTITY(1,1) PRIMARY KEY,
+        userID INT NOT NULL UNIQUE,
+        routeName NVARCHAR(100) NULL,
+        stopName NVARCHAR(100) NULL,
+        FOREIGN KEY (userID) REFERENCES users(userID) ON DELETE CASCADE
+      );
   `);
 
   console.log("✅ Tables verified/created successfully in Azure SQL");
