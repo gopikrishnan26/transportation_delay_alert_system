@@ -2,6 +2,7 @@ import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
 import { poolPromise, initializeTables } from "./database.js";
+import { sendSms } from "./sendSms.js";
 
 dotenv.config();
 const app = express();
@@ -88,6 +89,57 @@ app.post("/logout", async (req, res) => {
   }
 });
 
+// ✅ GET ALL DRIVERS
+app.get("/drivers", async (req, res) => {
+  try {
+    const pool = await poolPromise;
+    const result = await pool.request().query(`
+      SELECT userID, username, mobileNo FROM users WHERE role = 'driver'
+    `);
+    res.json(result.recordset);
+  } catch (err) {
+    console.error("DB Error:", err.message);
+    res.status(500).json({ message: "DB Error" });
+  }
+});
+
+// ✅ GET ALL ROUTES
+app.get("/routes", async (req, res) => {
+  try {
+    const pool = await poolPromise;
+    const result = await pool.request().query(`
+      SELECT routeID, routeName, driverID FROM driverRoutes
+    `);
+    res.json(result.recordset);
+  } catch (err) {
+    console.error("DB Error:", err.message);
+    res.status(500).json({ message: "DB Error" });
+  }
+});
+
+// ✅ GET BUS STOPS FOR ROUTE
+app.get("/bus-stops/:routeID", async (req, res) => {
+  const { routeID } = req.params;
+
+  try {
+    const pool = await poolPromise;
+    const result = await pool.request()
+      .input("routeID", routeID)
+      .query(`
+        SELECT stopID, stopName, arrivalTime
+        FROM busStops
+        WHERE routeID = @routeID
+        ORDER BY arrivalTime ASC
+      `);
+
+    res.json(result.recordset);
+  } catch (err) {
+    console.error("DB Error:", err.message);
+    res.status(500).json({ message: "DB Error" });
+  }
+});
+
+// -------------------ADMIN ROUTES-------------------
 // ✅ ADD DRIVER
 app.post("/addDriver", async (req, res) => {
   const { username, mobileNo } = req.body;
@@ -262,56 +314,7 @@ app.get("/driver-route/:driverID", async (req, res) => {
   }
 });
 
-// ✅ GET ALL DRIVERS
-app.get("/drivers", async (req, res) => {
-  try {
-    const pool = await poolPromise;
-    const result = await pool.request().query(`
-      SELECT userID, username, mobileNo FROM users WHERE role = 'driver'
-    `);
-    res.json(result.recordset);
-  } catch (err) {
-    console.error("DB Error:", err.message);
-    res.status(500).json({ message: "DB Error" });
-  }
-});
-
-// ✅ GET ALL ROUTES
-app.get("/routes", async (req, res) => {
-  try {
-    const pool = await poolPromise;
-    const result = await pool.request().query(`
-      SELECT routeID, routeName, driverID FROM driverRoutes
-    `);
-    res.json(result.recordset);
-  } catch (err) {
-    console.error("DB Error:", err.message);
-    res.status(500).json({ message: "DB Error" });
-  }
-});
-
-// ✅ GET BUS STOPS FOR ROUTE
-app.get("/bus-stops/:routeID", async (req, res) => {
-  const { routeID } = req.params;
-
-  try {
-    const pool = await poolPromise;
-    const result = await pool.request()
-      .input("routeID", routeID)
-      .query(`
-        SELECT stopID, stopName, arrivalTime
-        FROM busStops
-        WHERE routeID = @routeID
-        ORDER BY arrivalTime ASC
-      `);
-
-    res.json(result.recordset);
-  } catch (err) {
-    console.error("DB Error:", err.message);
-    res.status(500).json({ message: "DB Error" });
-  }
-});
-
+// -------------------------DRIVER-------------------------
 // ✅ ARRIVAL LOGGING AND DELAY CALCULATION
 app.post("/arrive", async (req, res) => {
   const { stopID, driverID } = req.body;
@@ -349,7 +352,7 @@ app.post("/arrive", async (req, res) => {
       }
     }
 
-    const threshold = parseInt(process.env.DELAY_MINUTES_THRESHOLD || "5", 10);
+    const threshold = process.env.DELAY_MINUTES_THRESHOLD;
     const status = delayMinutes > threshold ? "Delayed" : "On time";
 
     // Insert arrival record
@@ -372,13 +375,85 @@ app.post("/arrive", async (req, res) => {
       );
     }
 
-    res.json({ delayMinutes, status, threshold });
+    res.json({ delayMinutes, status, threshold, routeID: stop.routeID, stopID: stop.stopID });
   } catch (err) {
     console.error("DB Error:", err.message);
     res.status(500).json({ message: "DB Error" });
   }
 });
 
+// Alert SMS Notification
+app.post("/send-sms", async (req, res) => {
+  const { routeID, stopID, delayMinutes } = req.body;
+
+  if (!routeID || !stopID || !delayMinutes) {
+    return res.status(400).json({ message: "routeID, stopID, delayMinutes required" });
+  }
+
+  try {
+    const pool = await poolPromise;
+
+    // 1️⃣ Get all stops + routeName from busStops
+    const stopsResult = await pool.request()
+      .input("routeID", routeID)
+      .query(`
+        SELECT stopID, stopName, arrivalTime
+        FROM busStops
+        WHERE routeID = @routeID
+        ORDER BY arrivalTime ASC
+      `);
+
+    const stops = stopsResult.recordset;
+    if (stops.length === 0) {
+      return res.status(404).json({ message: "No stops found for this routeID" });
+    }
+
+    // 2️⃣ Determine remaining stops
+    const currentIndex = stops.findIndex(s => s.stopID === stopID);
+    const remainingStops = stops.slice(currentIndex + 1);
+
+    if (remainingStops.length === 0) {
+      return res.json({ message: "No upcoming stops, no SMS sent." });
+    }
+
+    // 3️⃣ Get phone numbers using routeName + remaining stopNames
+    const phonesResult = await pool.request()
+      .input("routeID", routeID)
+      .query(`
+        SELECT u.mobileNo
+        FROM students_faculty sf
+        JOIN users u ON u.userID = sf.userID
+        WHERE sf.routeID = @routeID
+        AND sf.stopID IN (${remainingStops.map(s => s.stopID).join(",")})
+      `);
+
+    const numbers = phonesResult.recordset.map(r => r.mobileNo);
+
+    if (numbers.length === 0) {
+      return res.json({ message: "No students/faculties assigned to upcoming stops." });
+    }
+
+    // 4️⃣ Send SMS using Azure
+    for (const num of numbers) {
+      const formattedNumber = "+91" + num;
+      await sendSms(
+        formattedNumber,
+        `Bus Delay Alert: Your bus is delayed by ${delayMinutes} minutes.`
+      );
+    }
+
+    res.json({
+      message: "SMS sent successfully.",
+      sentTo: numbers
+    });
+
+  } catch (err) {
+    console.error("SMS API Error:", err);
+    res.status(500).json({ message: "SMS sending failed", error: err.message });
+  }
+});
+
+// -----------------------SUBSCRIBER ROUTES-----------------------
 // ✅ REPORT LATE (from student/faculty when no notification received)
 app.post("/report-late", async (req, res) => {
   try {

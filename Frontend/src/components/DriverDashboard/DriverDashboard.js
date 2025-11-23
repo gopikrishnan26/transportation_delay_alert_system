@@ -14,7 +14,7 @@ function DriverDashboard() {
     } catch { return []; }
   });
   const [driverName, setDriverName] = useState("");
-  const driverID = useMemo(() => localStorage.getItem("userId"), []);
+  const driverID = useMemo(() => localStorage.getItem("userID"), []);
   const role = useMemo(() => localStorage.getItem("role"), []);
 
   useEffect(() => {
@@ -57,15 +57,31 @@ function DriverDashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ stopID: stop.stopID, driverID })
       });
+      
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Arrival failed");
-      const message = data.delayMinutes > 5
+      const message = data.delayMinutes > data.threshold
         ? `⚠️ Delay detected: ${data.delayMinutes} mins late at ${stop.stopName}.`
         : `✅ Arrived at ${stop.stopName} on time.`;
       setAlertMessage(message);
+      
       const next = Array.from(new Set([...(arrivedStopIds || []), stop.stopID]));
       setArrivedStopIds(next);
       localStorage.setItem("arrivedStopIds", JSON.stringify(next));
+
+      if (data.status == "Delayed") {
+        console.log("Sending SMS notification...");
+
+        await fetch(`${API_BASE}/send-sms`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            routeID: data.routeID,
+            stopID: data.stopID,
+            delayMinutes: data.delayMinutes
+          })
+        });
+      }
     } catch (e) {
       console.error(e);
       alert("Failed to record arrival. Please try again.");

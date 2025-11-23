@@ -86,9 +86,11 @@ export async function initializeTables() {
       CREATE TABLE students_faculty (
         id INT IDENTITY(1,1) PRIMARY KEY,
         userID INT NOT NULL UNIQUE,
-        routeName NVARCHAR(100) NULL,
-        stopName NVARCHAR(100) NULL,
-        FOREIGN KEY (userID) REFERENCES users(userID) ON DELETE CASCADE
+        routeID INT NOT NULL,
+        stopID INT NOT NULL,
+        FOREIGN KEY (userID) REFERENCES users(userID) ON DELETE CASCADE,
+        FOREIGN KEY (routeID) REFERENCES driverRoutes(routeID),
+        FOREIGN KEY (stopID) REFERENCES busStops(stopID)
       );
   `);
 
