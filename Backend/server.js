@@ -498,89 +498,54 @@ app.post("/report-late", async (req, res) => {
 });
 
 app.post("/subscribers", async (req, res) => {
-  const { userID, name, routeName, stopName, mobileNo } = req.body;
+  const { userID, mobileNo, routeID, stopID } = req.body;
 
   try {
     const pool = await poolPromise;
 
-    // If userID provided -> operate by userID (recommended)
-    if (userID) {
-      // Update mobile in users if provided
-      if (mobileNo) {
-        await pool.request()
-          .input("mobileNo", mobileNo)
-          .input("userID", userID)
-          .query(`
-            UPDATE users SET mobileNo = @mobileNo WHERE userID = @userID
-          `);
-      }
-
-      // Upsert students_faculty by userID
-      const existsRes = await pool.request()
-        .input("userID", userID)
-        .query(`SELECT userID FROM students_faculty WHERE userID = @userID`);
-
-      if (existsRes.recordset.length > 0) {
-        await pool.request()
-          .input("routeName", routeName || null)
-          .input("stopName", stopName || null)
-          .input("userID", userID)
-          .query(`
-            UPDATE students_faculty
-            SET routeName = @routeName, stopName = @stopName
-            WHERE userID = @userID
-          `);
-        return res.json({ message: "Subscription updated (by userID)" });
-      } else {
-        await pool.request()
-          .input("userID", userID)
-          .input("routeName", routeName || null)
-          .input("stopName", stopName || null)
-          .query(`
-            INSERT INTO students_faculty (userID, routeName, stopName)
-            VALUES (@userID, @routeName, @stopName)
-          `);
-        return res.json({ message: "Subscribed successfully (by userID)" });
-      }
-    }
-
-    // Backwards-compatible path: use mobileNo to upsert (old behavior)
-    if (!name || !mobileNo) {
-      return res.status(400).json({ message: "name and mobileNo are required when userID is not provided" });
-    }
-
-    // Existing mobile-based behavior (legacy)
-    const existsRes = await pool.request()
-      .input("mobileNo", mobileNo)
-      .query(`SELECT id FROM students_faculty WHERE mobileNo = @mobileNo`);
-
-    if (existsRes.recordset.length > 0) {
-      await pool.request()
-        .input("name", name)
-        .input("routeName", routeName || null)
-        .input("stopName", stopName || null)
-        .input("mobileNo", mobileNo)
-        .query(`
-          UPDATE students_faculty
-          SET name = @name, routeName = @routeName, stopName = @stopName
-          WHERE mobileNo = @mobileNo
-        `);
-      return res.json({ message: "Subscription updated (legacy mobile-based)" });
-    }
-
+    // Update user's mobile number
     await pool.request()
-      .input("name", name)
-      .input("routeName", routeName || null)
-      .input("stopName", stopName || null)
+      .input("userID", userID)
       .input("mobileNo", mobileNo)
       .query(`
-        INSERT INTO students_faculty (name, routeName, stopName, mobileNo)
-        VALUES (@name, @routeName, @stopName, @mobileNo)
+        UPDATE users SET mobileNo = @mobileNo WHERE userID = @userID
       `);
-    res.json({ message: "Subscribed successfully (legacy mobile-based)" });
+
+    // Check if subscriber exists
+    const exists = await pool.request()
+      .input("userID", userID)
+      .query(`SELECT id FROM students_faculty WHERE userID = @userID`);
+
+    if (exists.recordset.length > 0) {
+      const routeIDInt = routeID ? parseInt(routeID, 10) : null;
+      const stopIDInt = stopID ? parseInt(stopID, 10) : null;
+
+      await pool.request()
+        .input("userID", userID)
+        .input("routeID", routeIDInt)
+        .input("stopID", stopIDInt)
+        .query(`
+          UPDATE students_faculty
+          SET routeID = @routeID, stopID = @stopID
+          WHERE userID = @userID
+        `);
+
+      return res.json({ message: "Subscription updated" });
+    }
+
+    // Insert new subscription
+    await pool.request()
+      .input("userID", userID)
+      .input("routeID", routeID)
+      .input("stopID", stopID)
+      .query(`
+        INSERT INTO students_faculty (userID, routeID, stopID)
+        VALUES (@userID, @routeID, @stopID)
+      `);
+
+    res.json({ message: "Subscribed successfully" });
   } catch (err) {
-    console.error("DB Error:", err.message);
-    res.status(500).json({ message: "DB Error" });
+    res.status(500).json({ message: "DB Error", error: err.message });
   }
 });
 
@@ -603,26 +568,34 @@ app.get("/subscriber/:userID", async (req, res) => {
   try {
     const pool = await poolPromise;
     const userId = parseInt(req.params.userID, 10);
-    if (isNaN(userId)) return res.status(400).json({ message: "Invalid userID" });
 
-    // Left join so we still return user info if students_faculty row missing
     const result = await pool.request()
       .input("userID", userId)
       .query(`
-        SELECT u.userID, u.username, u.mobileNo, u.role,
-               sf.routeName, sf.stopName
+        SELECT 
+          u.userID,
+          u.username AS name,
+          u.mobileNo,
+          sf.routeID,
+          sf.stopID,
+          dr.routeName,
+          bs.stopName
         FROM users u
         LEFT JOIN students_faculty sf ON sf.userID = u.userID
+        LEFT JOIN driverRoutes dr ON dr.routeID = sf.routeID
+        LEFT JOIN busStops bs ON bs.stopID = sf.stopID
         WHERE u.userID = @userID
       `);
 
-    if (result.recordset.length === 0) return res.status(404).json({ message: "User not found" });
+    if (result.recordset.length === 0)
+      return res.status(404).json({ message: "User not found" });
+
     res.json(result.recordset[0]);
   } catch (err) {
-    console.error("DB Error:", err.message);
-    res.status(500).json({ message: "DB Error" });
+    res.status(500).json({ message: "DB Error", error: err.message });
   }
 });
+
 
 // --------------------- SERVER START ---------------------
 const PORT = process.env.PORT || 5000;

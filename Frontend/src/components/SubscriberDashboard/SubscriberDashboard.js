@@ -1,14 +1,14 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { API_BASE } from "../../utils/api";
-import "./SubscriberDashboard.css"; // ← Import external CSS
+import "./SubscriberDashboard.css";
 
 function SubscriberDashboard() {
   const navigate = useNavigate();
   const [mobileNo, setMobileNo] = useState("");
   const [name, setName] = useState("");
-  const [routeName, setRouteName] = useState("");
-  const [stopName, setStopName] = useState("");
+  const [routeID, setRouteID] = useState("");
+  const [stopID, setStopID] = useState("");
 
   const [originalMobile, setOriginalMobile] = useState("");
   const [originalName, setOriginalName] = useState("");
@@ -22,6 +22,7 @@ function SubscriberDashboard() {
 
   const userID = localStorage.getItem("userID");
 
+  // Load all routes
   useEffect(() => {
     fetch(`${API_BASE}/routes`)
       .then((r) => r.json())
@@ -29,37 +30,35 @@ function SubscriberDashboard() {
       .catch(console.error);
   }, []);
 
+  // Load stops for selected route
   useEffect(() => {
-    const selected = routes.find((r) => r.routeName === routeName);
-    if (selected) {
-      fetch(`${API_BASE}/bus-stops/${selected.routeID}`)
-        .then((r) => r.json())
-        .then(setStops)
-        .catch(console.error);
-    } else {
+    if (!routeID) {
       setStops([]);
+      return;
     }
-  }, [routeName, routes]);
+    fetch(`${API_BASE}/bus-stops/${routeID}`)
+      .then((r) => r.json())
+      .then(setStops)
+      .catch(console.error);
+  }, [routeID]);
 
+  // Load subscriber profile
   useEffect(() => {
     const loadProfile = async () => {
       if (!userID) return;
-
       try {
         const res = await fetch(`${API_BASE}/subscriber/${userID}`);
         const data = await res.json();
 
         setMobileNo(data.mobileNo || "");
         setName(data.name || data.username || data.fullName || "");
-        setRouteName(data.routeName || "");
-        setStopName(data.stopName || "");
+        setRouteID(data.routeID || "");
+        setStopID(data.stopID || "");
 
-        // Save original values
         setOriginalMobile(data.mobileNo || "");
         setOriginalName(data.name || data.username || data.fullName || "");
-        setOriginalRoute(data.routeName || "");
-        setOriginalStop(data.stopName || "");
-
+        setOriginalRoute(data.routeID || "");
+        setOriginalStop(data.stopID || "");
       } catch (err) {
         console.error(err);
       }
@@ -78,19 +77,18 @@ function SubscriberDashboard() {
         body: JSON.stringify({
           userID: parseInt(userID, 10),
           mobileNo,
-          routeName,
-          stopName
-        })
+          routeID,
+          stopID,
+        }),
       });
 
       const data = await res.json();
       setStatusMsg(data.message);
 
-      // Save new original values
       setOriginalMobile(mobileNo);
       setOriginalName(name);
-      setOriginalRoute(routeName);
-      setOriginalStop(stopName);
+      setOriginalRoute(routeID);
+      setOriginalStop(stopID);
 
       setIsEditing(false);
     } catch (err) {
@@ -101,8 +99,8 @@ function SubscriberDashboard() {
   const handleCancel = () => {
     setMobileNo(originalMobile);
     setName(originalName);
-    setRouteName(originalRoute);
-    setStopName(originalStop);
+    setRouteID(originalRoute);
+    setStopID(originalStop);
     setIsEditing(false);
   };
 
@@ -119,39 +117,57 @@ function SubscriberDashboard() {
         <h2>Subscribe for Delay Alerts</h2>
 
         <form onSubmit={handleSubmit} className="sd-form">
+          {/* MOBILE NUMBER */}
           <label className="input-label">Mobile Number</label>
-          <input value={mobileNo} readOnly className="input-field" />
+          <input
+            type="text"
+            value={mobileNo}
+            className="input-field"
+            onChange={(e) => setMobileNo(e.target.value)}
+            disabled={!isEditing}
+            required
+          />
 
+          {/* NAME */}
           <label className="input-label">Name</label>
-          <input value={name} readOnly className="input-field" />
+          <input
+            type="text"
+            value={name}
+            className="input-field"
+            onChange={(e) => setName(e.target.value)}
+            disabled={!isEditing}
+            required
+          />
 
+          {/* ROUTE */}
           <label className="input-label">Route Name</label>
           <select
-            value={routeName}
+            value={routeID}
             className="input-field"
-            onChange={(e) => setRouteName(e.target.value)}
+            onChange={(e) => setRouteID(e.target.value)}
             disabled={!isEditing}
             required
           >
             <option value="">Select Route</option>
             {routes.map((r) => (
-              <option key={r.routeID} value={r.routeName}>
+              <option key={r.routeID} value={r.routeID}>
                 {r.routeName}
               </option>
             ))}
           </select>
 
+          {/* STOP */}
           <label className="input-label">Stop Name</label>
           <select
-            value={stopName}
+            value={stopID}
             className="input-field"
-            onChange={(e) => setStopName(e.target.value)}
+            onChange={(e) => setStopID(e.target.value)}
             disabled={!isEditing}
             required
           >
             <option value="">Select Stop</option>
             {stops.map((s) => (
-              <option key={s.stopID} value={s.stopName}>
+              <option key={s.stopID} value={s.stopID}>
                 {s.stopName}
               </option>
             ))}
